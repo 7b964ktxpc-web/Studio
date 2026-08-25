@@ -38,7 +38,9 @@
 - authoritative request snapshot adapter;
 - Realtime → authoritative request binding;
 - reconnect snapshot recovery;
-- active request Realtime lifecycle controller with stale-callback protection.
+- active request Realtime lifecycle controller with stale-callback protection;
+- opt-in main UI Realtime bridge for `index.html`;
+- deterministic main UI Realtime bridge E2E harness.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -58,13 +60,13 @@
 
 ## Следующий этап
 
-1. Подключить `NowPresenceWidget` к основному `index.html` без изменения существующей навигации.
+1. Подключить `main-ui-realtime-bridge.js` и его browser dependencies одной строкой/набором script tags в `index.html`, сохранив текущий inline demo flow при отсутствии adapters.
 2. Подключить create-request adapter: геолокация → `requests`.
 3. Подключить answer adapter: nearby request → ответ одним тапом.
 4. Связать `notification_events` с Web Push delivery worker.
 5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
 6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
-7. Подключить `createActiveRequestRealtimeController()` к lifecycle активного запроса в основном UI; не допускать обновления UI от устаревшей подписки.
+7. Проверить production UI lifecycle на reconnect/terminal/switch сценариях.
 
 ## Принцип MVP
 
