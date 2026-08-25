@@ -7,6 +7,7 @@
 - The returned `refreshNow()` performs the same authoritative read and exposes the resulting snapshot to `onSnapshot`.
 - Refresh failures are routed to `onRefreshError` instead of becoming unhandled promise rejections.
 - `subscription.unsubscribe()` remains responsible for channel cleanup and subscription-local dedupe cleanup.
+- Every successful Realtime subscription (`SUBSCRIBED`), including a reconnect, performs an authoritative refresh so missed events cannot leave the requester stale.
 
 ## Two-user E2E acceptance
 
@@ -17,9 +18,18 @@
 5. Realtime delivers `answer.created` to the requester.
 6. The binding calls `flow.refreshRequest(requestId)` exactly once for the first delivery.
 7. The authoritative snapshot returned by `my_request` is the value exposed to the requester UI.
-8. A duplicate delivery of the same answer does not cause another refresh because the existing subscription deduper rejects it.
+8. A duplicate delivery of the same answer does not cause another event refresh because the existing subscription deduper rejects it.
 9. A responder beyond 250 m never becomes eligible for automatic push.
 10. No exact responder coordinates or private profile fields cross the Realtime adapter.
+
+## Reconnect recovery acceptance
+
+1. The requester is subscribed to the request channel.
+2. The transport reports `SUBSCRIBED` after the initial connection or a reconnect.
+3. The subscription performs one authoritative `refreshRequest(requestId)` on that `SUBSCRIBED` transition.
+4. If an answer/status event was missed while disconnected, the refreshed snapshot reflects the server state without requiring a replayed Realtime payload.
+5. Repeated `SUBSCRIBED` transitions are treated as connection recovery events; event dedupe state remains scoped to the live subscription.
+6. `UNSUBSCRIBED`/cleanup does not perform a refresh after the channel is intentionally closed.
 
 ## Test boundary
 
