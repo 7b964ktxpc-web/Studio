@@ -32,11 +32,9 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      tag: payload.tag || 'now-nearby-request',
+      tag: typeof payload.tag === 'string' ? payload.tag : 'now-nearby-request',
       renotify: false,
-      data: { url },
-      icon: '/now/icon-192.png',
-      badge: '/now/icon-192.png'
+      data: { url }
     })
   );
 });
