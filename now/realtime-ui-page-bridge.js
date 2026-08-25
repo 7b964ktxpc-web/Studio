@@ -48,8 +48,27 @@
     });
   }
 
+  async function createAndStartRequest(input) {
+    const adapter = window.NowCreateRequestAdapter;
+    if (!adapter || typeof adapter.createRequest !== 'function') {
+      throw new Error('Create request adapter is not available');
+    }
+
+    const result = await adapter.createRequest(input);
+    const requestId = String(result?.request_id || '').trim();
+    if (!requestId) throw new Error('Create request adapter returned no request_id');
+
+    const start = window.NowStartRequestRealtime;
+    if (typeof start !== 'function') throw new Error('Realtime start hook is not available');
+    await start(requestId);
+    return result;
+  }
+
   window[globalKey] = Object.freeze({
     resolveDependencies,
     createOptionalBridge,
+    createAndStartRequest,
   });
+
+  window.NowCreateAndStartRequest = createAndStartRequest;
 })();
