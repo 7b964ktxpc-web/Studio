@@ -10,26 +10,54 @@
 const $=id=>document.getElementById(id);const add=(t,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+t;$('steps').appendChild(e);return ok};
 const frame=$('app');
 async function loadScript(win,src){return new Promise((resolve,reject)=>{const s=win.document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;win.document.head.appendChild(s);});}
+async function settle(ms=0){await new Promise(r=>setTimeout(r,ms));}
 $('run').onclick=async()=>{
   $('steps').innerHTML='';
   const w=frame.contentWindow,d=frame.contentDocument;
   await new Promise(r=>{if(d?.readyState==='complete'||d?.body)return r();frame.addEventListener('load',r,{once:true});setTimeout(r,2000)});
   if(!add('Main index.html loaded',!!d?.body))return;
-  if(!add('Main question input exists',!!d.querySelector('#question')))return;
-  if(!add('Main ask button exists',!!d.querySelector('#askBtn')))return;
+  const question=d.querySelector('#question'),button=d.querySelector('#askBtn'),geo=d.querySelector('#geo');
+  if(!add('Main question input exists',!!question))return;
+  if(!add('Main ask button exists',!!button))return;
+  if(!add('Main geo status exists',!!geo))return;
   try{await loadScript(w,'realtime-ui-adapter-contract.js');await loadScript(w,'realtime-ui-lifecycle.js');await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Realtime bridge scripts load',false);return;}
   if(!add('Main UI bridge is disabled without adapter',w.NowMainUiRealtimeBridge?.enabled===false))return;
-  let creates=0,starts=0,active=null;
-  w.NowRealtimeAdapter={async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},async stop(){active=null}};
-  w.NowCreateRequestAdapter={async createRequest(){creates+=1;return{request_id:'00000000-0000-4000-8000-000000000061',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};}};
-  const bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
-  w.NowMainRequestRealtimeBridge=bridge;
+
+  let creates=0,starts=0,stops=0,active=null,received=null;
+  w.NowRealtimeAdapter={
+    async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},
+    async stop(){stops+=1;active=null;}
+  };
+  w.NowCreateRequestAdapter={
+    async createRequest(input){
+      creates+=1;received=input;
+      await settle(20);
+      return{request_id:'00000000-0000-4000-8000-000000000063',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
+    }
+  };
+  let bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
+  w.NowMainUiRealtimeBridge=bridge;
   if(!add('Injected adapters enable main bridge',bridge?.enabled===true))return;
-  await bridge.start('00000000-0000-4000-8000-000000000061');
-  $('bridge').textContent=bridge.enabled?'enabled':'disabled';$('starts').textContent=String(starts);$('active').textContent=active||'—';
-  if(!add('Realtime starts with authoritative request ID',starts===1&&active==='00000000-0000-4000-8000-000000000061'))return;
-  if(!add('Question input remains available',!!d.querySelector('#question')))return;
-  $('creates').textContent=String(creates);$('bridge').textContent='enabled';
-  $('steps').insertAdjacentHTML('beforeend','<div class="step ok">✅ Main UI Realtime bridge E2E passed</div>');
+
+  const originalGeolocation=w.navigator.geolocation;
+  Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:{
+    getCurrentPosition(success){success({coords:{accuracy:25,latitude:54.98765,longitude:82.89890}})}
+  }});
+  try{
+    question.value='Есть ли сейчас очередь?';
+    const labelBefore=button.textContent;
+    button.click();
+    if(!add('Real button enters busy state',button.disabled===true&&button.getAttribute('aria-busy')==='true'))return;
+    await settle(60);
+    if(!add('createRequest called exactly once',creates===1))return;
+    if(!add('Real geolocation accuracy gate accepted ±25 m',received?.latitude===54.98765&&received?.longitude===82.89890))return;
+    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000063'))return;
+    if(!add('Question clears only after successful handoff',question.value===''))return;
+    if(!add('Button restores after handoff',button.disabled===false&&button.getAttribute('aria-busy')===null&&button.textContent===labelBefore))return;
+    $('bridge').textContent='enabled';$('creates').textContent=String(creates);$('starts').textContent=String(starts);$('active').textContent=active||'—';
+    $('steps').insertAdjacentHTML('beforeend','<div class="step ok">✅ Main UI real create → Realtime E2E passed</div>');
+  } finally {
+    Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:originalGeolocation});
+  }
 };
 </script></main></body></html>
