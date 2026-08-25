@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><title>Now main UI loader rehearsal</title><script>window.__NOW_LOADER_REHEARSAL__={loaded:false,createCalls:0,realtimeCalls:0};</script><iframe id="app" src="/now/index.html" style="width:100%;height:720px;border:0"></iframe><script>
+const frame=document.getElementById('app');
+frame.addEventListener('load',()=>{
+  const w=frame.contentWindow;
+  const d=frame.contentDocument;
+  const result={indexLoaded:true,askButton:!!d.getElementById('askBtn'),question:!!d.getElementById('question'),geo:!!d.getElementById('geo'),bridgeScriptPresent:false};
+  // This rehearsal intentionally does not mutate the production page. It records the exact
+  // one-script integration contract that will be applied to index.html in the next atomic patch.
+  const scripts=[...d.scripts].map(s=>s.src).filter(Boolean);
+  result.bridgeScriptPresent=scripts.some(src=>src.endsWith('/now/main-ui-realtime-bridge.js'));
+  document.body.dataset.result=JSON.stringify(result);
+  document.body.textContent=JSON.stringify(result,null,2);
+});
+</script>
