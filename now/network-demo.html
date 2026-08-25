@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#151515">
+  <title>Сейчас — network demo</title>
+  <style>
+    :root{--bg:#f5f5f0;--card:#fff;--ink:#151515;--muted:#777;--line:#e7e4de;--green:#2cad5a;--yellow:#f5b51b;--red:#e85e5e}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{width:min(760px,calc(100% - 24px));margin:auto;padding:22px 0 44px}
+    .top{display:flex;justify-content:space-between;align-items:center}.brand{font-size:21px;font-weight:850}.badge{font-size:12px;color:var(--muted)}h1{font-size:42px;line-height:1;letter-spacing:-.05em;margin:26px 0 10px}.lead{color:#5f5f5f;line-height:1.45}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:20px 0}.tab{border:1px solid var(--line);background:#fff;border-radius:14px;padding:13px;font-weight:850}.tab.active{background:#151515;color:#fff}.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px;box-shadow:0 14px 36px rgba(0,0,0,.06);margin-top:12px}label{display:block;font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px}textarea,input,select{width:100%;border:1px solid var(--line);border-radius:13px;padding:12px;font:inherit;background:#fff;outline:none}textarea{min-height:90px;resize:vertical}.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.row>*{flex:1}.btn{border:0;border-radius:13px;padding:12px 14px;font:inherit;font-weight:850;cursor:pointer;background:#efede8}.btn.primary{background:var(--green);color:#fff}.request{padding:14px;border:1px solid var(--line);border-radius:15px;margin-top:10px}.request .meta{font-size:12px;color:var(--muted);margin-top:4px}.choices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.choice{border:0;border-radius:12px;padding:12px;font:inherit;font-weight:850;cursor:pointer}.yes{background:#dff4e5;color:#137936}.mid{background:#fff1c9;color:#896300}.no{background:#ffe2e2;color:#a23f3f}.empty{color:var(--muted);text-align:center;padding:24px 0}.status{display:flex;align-items:center;gap:8px;font-weight:850}.dot{width:9px;height:9px;border-radius:50%;background:var(--green)}
+    @media(max-width:560px){h1{font-size:36px}.choices{grid-template-columns:1fr}.row>*{flex:auto;width:100%}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="brand">Сейчас</div><div class="badge">Network demo</div></div>
+  <h1>Два телефона.<br>Один живой вопрос.</h1>
+  <div class="lead">Этот экран имитирует будущую механику «вопрос → люди рядом → ответ». Открой страницу в двух вкладках одного браузера: одна будет спрашивать, другая — отвечать.</div>
+  <div class="tabs"><button class="tab active" id="askTab">🙋 Я спрашиваю</button><button class="tab" id="helpTab">👋 Я рядом</button></div>
+
+  <section id="askMode" class="card">
+    <label for="question">ВОПРОС</label>
+    <textarea id="question" placeholder="Например: «В МФЦ сейчас большая очередь?»"></textarea>
+    <div class="row"><button id="send" class="btn primary">Спросить рядом</button><button id="clear" class="btn">Очистить</button></div>
+    <div id="askStatus" class="request"><div class="status"><span class="dot"></span> Готово</div><div class="meta">Ответ появится здесь, когда вкладка «Я рядом» ответит.</div></div>
+  </section>
+
+  <section id="helpMode" class="card" style="display:none">
+    <div class="status"><span class="dot"></span> Вы можете помогать людям рядом</div>
+    <div class="lead" style="margin-top:8px">В боевой версии здесь будут показываться только вопросы в разрешённом радиусе. Сейчас они передаются между вкладками локально.</div>
+    <div id="incoming" class="empty">Пока запросов нет.</div>
+  </section>
+</div>
+<script>
+  const CHANNEL='now-network-demo-v1';
+  const storageKey='now-demo-requests';
+  const bc=('BroadcastChannel' in window)?new BroadcastChannel(CHANNEL):null;
+  const askTab=document.getElementById('askTab'),helpTab=document.getElementById('helpTab'),askMode=document.getElementById('askMode'),helpMode=document.getElementById('helpMode');
+  const question=document.getElementById('question'),send=document.getElementById('send'),clear=document.getElementById('clear'),askStatus=document.getElementById('askStatus'),incoming=document.getElementById('incoming');
+  let currentId=null;
+  function setMode(mode){const ask=mode==='ask';askMode.style.display=ask?'block':'none';helpMode.style.display=ask?'none':'block';askTab.classList.toggle('active',ask);helpTab.classList.toggle('active',!ask);if(!ask)renderIncoming();}
+  askTab.onclick=()=>setMode('ask');helpTab.onclick=()=>setMode('help');
+  function read(){try{return JSON.parse(localStorage.getItem(storageKey)||'[]')}catch{return []}}
+  function write(items){localStorage.setItem(storageKey,JSON.stringify(items));}
+  function broadcast(message){if(bc)bc.postMessage(message)}
+  function sendQuestion(){const text=question.value.trim();if(!text){question.focus();return}const req={id:crypto.randomUUID(),text,createdAt:Date.now(),status:'waiting',answer:null};currentId=req.id;write([...read().slice(-9),req]);broadcast({type:'question',request:req});renderAsk(req);}
+  function renderAsk(req){askStatus.innerHTML=req.answer?`<div class="status"><span class="dot"></span> Ответ получен</div><b style="display:block;margin-top:8px;font-size:20px">${escapeHtml(req.answer)}</b><div class="meta">${new Date(req.answeredAt).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})} · человек рядом</div>`:`<div class="status"><span class="dot"></span> Ищем человека рядом</div><div class="meta">Запрос живёт 10 минут · ждём ответ</div>`;}
+  function renderIncoming(){const active=read().filter(r=>r.status==='waiting'&&Date.now()-r.createdAt<600000);if(!active.length){incoming.innerHTML='<div class="empty">Пока запросов нет.</div>';return}incoming.innerHTML=active.map(r=>`<div class="request"><b>📍 Человек рядом спрашивает</b><div style="margin-top:6px">${escapeHtml(r.text)}</div><div class="choices"><button class="choice yes" data-id="${r.id}" data-answer="Нет очереди">🟢 Нет</button><button class="choice mid" data-id="${r.id}" data-answer="Очередь небольшая">🟡 Небольшая</button><button class="choice no" data-id="${r.id}" data-answer="Очередь большая">🔴 Большая</button></div></div>`).join('');incoming.querySelectorAll('.choice').forEach(b=>b.onclick=()=>answer(b.dataset.id,b.dataset.answer));}
+  function answer(id,value){const items=read();const idx=items.findIndex(r=>r.id===id);if(idx<0)return;items[idx].status='answered';items[idx].answer=value;items[idx].answeredAt=Date.now();write(items);broadcast({type:'answer',request:items[idx]});renderIncoming();}
+  function applyRemote(message){if(message.type==='question'){renderIncoming();}if(message.type==='answer'&&message.request.id===currentId)renderAsk(message.request);}
+  function escapeHtml(value){return value.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\'':'&#39;','"':'&quot;'}[c]));}
+  send.onclick=sendQuestion;clear.onclick=()=>{question.value='';currentId=null;askStatus.innerHTML='<div class="status"><span class="dot"></span> Готово</div><div class="meta">Ответ появится здесь, когда вкладка «Я рядом» ответит.</div>';};
+  if(bc)bc.onmessage=e=>applyRemote(e.data);window.addEventListener('storage',()=>{renderIncoming();const req=read().find(r=>r.id===currentId);if(req)renderAsk(req);});
+  setInterval(()=>{renderIncoming();const req=read().find(r=>r.id===currentId);if(req)renderAsk(req);},5000);
+</script>
+</body>
+</html>
