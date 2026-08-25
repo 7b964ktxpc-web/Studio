@@ -29,7 +29,9 @@ window.NowRealtimeAdapter = {
 
 `realtime-ui-adapter-contract.js` provides runtime validation for the injected object. A valid adapter must expose callable `start()` and `stop()` methods. Invalid candidates resolve to `null` with explicit validation errors instead of being invoked.
 
-The page creates the lifecycle wrapper only when a valid adapter exists. Without the adapter, the current offline/demo behavior remains unchanged. `createNoopAdapter()` is available for deterministic tests, but the demo page does not silently treat the no-op adapter as a real backend.
+`realtime-ui-page-bridge.js` is the opt-in browser bridge. It resolves the validated adapter and creates exactly one active-request UI lifecycle. When the adapter or lifecycle dependency is missing, it returns a safe disabled bridge and does not create a backend fallback.
+
+The demo page may load the bridge without changing its current offline behavior. The bridge does not create a Supabase client, credentials, or production writes.
 
 ## Acceptance
 
@@ -37,7 +39,8 @@ The page creates the lifecycle wrapper only when a valid adapter exists. Without
 2. Missing `window.NowRealtimeAdapter` does not throw.
 3. A candidate without `start()` or `stop()` is rejected before invocation.
 4. A valid real adapter may be injected before a request is started.
-5. Starting request B stops request A first.
-6. Late callbacks from A are ignored after B becomes active.
-7. No callback from an inactive request may mutate the active request UI.
-8. No production Supabase client or credentials are created by the browser seam itself.
+5. The page bridge creates exactly one lifecycle wrapper for the validated adapter.
+6. Starting request B stops request A first.
+7. Late callbacks from A are ignored after B becomes active.
+8. No callback from an inactive request may mutate the active request UI.
+9. No production Supabase client or credentials are created by the browser seam itself.
