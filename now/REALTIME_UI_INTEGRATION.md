@@ -41,6 +41,8 @@ While the real create flow is in flight, the button is disabled and marked `aria
 
 The bridge also provides safe browser-page default handlers when `#geo` exists. They consume only the existing `request_status/status` contract: `SEARCHING`, `ANSWERED`, `EXPIRED`, and `CANCELLED` become human-readable request states; `SUBSCRIBED`, `CHANNEL_ERROR`, and Realtime errors update the same lightweight status area. Unknown snapshot fields are ignored, and callers can override any default handler explicitly.
 
+When a snapshot reports a terminal request state (`ANSWERED`, `EXPIRED`, or `CANCELLED`), the bridge first delivers the snapshot to the UI handler and then asynchronously stops the active Realtime lifecycle. This leaves the terminal state visible while releasing the subscription and clearing the active request.
+
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
 ## Active request UI hook
@@ -126,6 +128,17 @@ The harness does not create a Supabase client and does not write production data
 3. the UI update is driven by the authoritative snapshot callback, not by a demo timer;
 4. no Supabase client or production write is required.
 
+## Terminal Realtime cleanup E2E
+
+`e2e-terminal-realtime-cleanup.html` loads the actual `index-integrated.html`, injects a deterministic Realtime adapter, starts a request, and delivers an `ANSWERED` authoritative snapshot. It checks:
+
+1. the terminal snapshot is delivered once;
+2. the standalone UI shows `Ответ получен`;
+3. `stop()` is called after the terminal snapshot;
+4. no active request remains after terminal cleanup.
+
+The harness does not create a Supabase client and does not write production data.
+
 ## Deterministic browser E2E
 
 `e2e-realtime-page-bridge.html` loads the contract, lifecycle, and page bridge in a real browser context and checks:
@@ -192,4 +205,6 @@ The harness does not create a Supabase client and does not write production data
 23. The duplicate click E2E passes with exactly one create call and restores the button after completion.
 24. Authoritative `ANSWERED` and `EXPIRED` snapshots reach the standalone UI through the browser page bridge.
 25. Default UI handlers ignore unknown snapshot fields and can be overridden by explicit bridge callbacks.
-26. No production Supabase client or credentials are created by the browser seam itself.
+26. Terminal `ANSWERED`, `EXPIRED`, or `CANCELLED` snapshots release the active Realtime subscription after the UI callback runs.
+27. The terminal Realtime cleanup E2E passes without requiring Supabase.
+28. No production Supabase client or credentials are created by the browser seam itself.
