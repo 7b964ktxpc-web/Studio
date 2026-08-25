@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Now — create to realtime E2E</title><style>
+body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}</style></head><body><main>
+<h1>Сейчас — create → Realtime E2E</h1>
+<div class="card"><button id="run">Запустить E2E</button><div id="steps"></div></div>
+<div class="card"><div>Created requests: <b id="created">0</b></div><div>Realtime starts: <b id="starts">0</b></div><div>Started request id: <b id="request">—</b></div><div><b id="result">Ready</b></div></div>
+<script>
+const $=id=>document.getElementById(id);const add=(t,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+t;$('steps').appendChild(e);return ok};
+const frame=document.createElement('iframe');frame.src='index-integrated.html';frame.hidden=true;document.body.appendChild(frame);
+$('run').onclick=async()=>{
+  $('steps').innerHTML='';$('result').textContent='Running';$('created').textContent='0';$('starts').textContent='0';$('request').textContent='—';
+  await new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('timeout')),2000)}).catch(()=>{});
+  const w=frame.contentWindow;
+  if(!add('Create→Realtime hook is exposed',typeof w.NowCreateAndStartRequest==='function'))return;
+
+  let creates=0,starts=0,lastStarted=null;
+  w.NowCreateRequestAdapter={
+    async createRequest(){creates+=1;return{request_id:'req-create-e2e-001',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};}
+  };
+  w.NowRealtimeAdapter={
+    async start(id){starts+=1;lastStarted=id;},
+    async stop(){}
+  };
+
+  const bridge=w.NowRealtimePageBridge.createOptionalBridge({});
+  w.NowRequestRealtimeBridge=bridge;
+  const result=await w.NowCreateAndStartRequest({text:'Есть очередь?',latitude:55.03,longitude:82.92});
+  $('created').textContent=String(creates);$('starts').textContent=String(starts);$('request').textContent=lastStarted||'—';
+  if(!add('Create adapter called once',creates===1))return;
+  if(!add('Create result contains request_id',result?.request_id==='req-create-e2e-001'))return;
+  if(!add('Realtime started with created request_id',starts===1&&lastStarted==='req-create-e2e-001'))return;
+  if(!add('Bridge active request matches create result',bridge.getActiveRequestId()==='req-create-e2e-001'))return;
+
+  let failed=true,missingStarts=starts;w.NowCreateRequestAdapter={async createRequest(){return{request_status:'SEARCHING'}}};
+  try{await w.NowCreateAndStartRequest({text:'broken',latitude:55.03,longitude:82.92});failed=false;}catch{}
+  if(!add('Missing request_id is rejected',failed))return;
+  if(!add('Missing request_id does not start Realtime',starts===missingStarts))return;
+  await bridge.stop();
+  $('result').textContent='✅ Create→Realtime E2E passed';
+};
+</script></main></body></html>
