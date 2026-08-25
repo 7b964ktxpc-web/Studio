@@ -1,6 +1,26 @@
 (() => {
   const PROJECT_URL = 'https://amyysvcpmbyuxelxixqj.supabase.co';
   const PUBLISHABLE_KEY = 'sb_publishable_3i7SUzaHZEproIBz4l8K-g_jsOhoiiB';
+  const runtimeScripts = [
+    'supabase-nearby-notification-source.js',
+    'main-ui-answer-realtime-controller.js',
+    'main-ui-answer-nearby-coordinator.js',
+  ];
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      if ([...document.scripts].some(script => script.src.endsWith(`/${src}`))) {
+        resolve();
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = false;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(script);
+    });
+  }
 
   async function bootstrap() {
     const status = document.querySelector('#geo');
@@ -19,6 +39,8 @@
       }
       if (!session?.user?.id) throw new Error('Authenticated Supabase session was not created');
 
+      for (const src of runtimeScripts) await loadScript(src);
+
       const realtimeFactory = window.NowSupabaseRealtimeAdapter?.createOptionalAdapter;
       const realtime = typeof realtimeFactory === 'function' ? realtimeFactory(client) : null;
       if (realtime?.enabled) window.NowRealtimeAdapter = realtime;
@@ -29,6 +51,34 @@
       if (window.NowRealtimePageBridge?.createOptionalBridge) {
         window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({});
         window.NowRealtimePageBridge.installCreateRequestButtonHook?.();
+      }
+
+      const source = window.NowSupabaseNearbyNotificationSource?.createOptionalSource?.(client);
+      const controller = window.NowMainUiAnswerRealtimeController?.create?.({
+        bridge: window.NowMainUiAnswerBridge,
+        onError: error => console.error('[Сейчас] answer realtime error', error),
+      });
+
+      if (source?.enabled && controller?.enabled && window.NowMainUiAnswerNearbyCoordinator?.create) {
+        window.NowNearbyRequestEventSource = source;
+        const coordinator = window.NowMainUiAnswerNearbyCoordinator.create({
+          source,
+          controller,
+          bridge: window.NowMainUiAnswerBridge,
+          onEvent: event => {
+            const request = event?.request || {};
+            const incoming = document.querySelector('#incoming');
+            const title = incoming?.querySelector('[data-nearby-question]') || incoming?.querySelector('div[style*="font-size:18px"]');
+            const distance = incoming?.querySelector('.distance');
+            if (title && request.text) title.textContent = request.text;
+            if (distance && Number.isFinite(Number(request.distance_m))) {
+              distance.textContent = `📍 Ты примерно в ${Math.round(Number(request.distance_m))} м от места`;
+            }
+          },
+          onError: error => console.error('[Сейчас] nearby notification error', error),
+        });
+        if (coordinator?.enabled) await coordinator.start();
+        window.NowNearbyAnswerCoordinator = coordinator;
       }
 
       window.NowSupabaseRuntime = Object.freeze({ authenticated: true, userId: session.user.id });
