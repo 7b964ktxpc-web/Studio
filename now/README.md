@@ -39,26 +39,17 @@
 - Realtime → authoritative request binding;
 - reconnect snapshot recovery;
 - active request Realtime lifecycle controller with stale-callback protection;
-- opt-in main UI Realtime bridge for `index.html`;
-- self-loading main UI Realtime bridge;
-- synchronous main UI button capture before async bootstrap;
-- preloaded-dependency-safe main UI Realtime bridge;
-- deterministic main UI Realtime bridge E2E harness;
-- regression gate for geolocation accuracy `> 50 m`;
-- regression gate for duplicate bridge script loads;
-- regression gate for late adapter injection racing the legacy inline handler;
-- regression gate for dependencies already loaded before bridge bootstrap;
+- opt-in main UI Realtime bridge + self-loading bootstrap;
+- синхронный capture hook до async bootstrap;
+- защиты от duplicate-load, preloaded dependencies и late adapter races;
 - opt-in main UI answer bridge;
-- deterministic main UI answer bridge E2E harness;
-- regression gate for one-answer submission and terminal `REQUEST_EXPIRED` / `ALREADY_ANSWERED` handling;
-- authoritative terminal snapshot guard for answer controls;
-- opt-in main UI answer Realtime controller;
-- deterministic answer Realtime controller E2E harness;
-- opt-in nearby-answer coordinator;
-- deterministic nearby-answer coordinator E2E harness;
-- regression gate for malformed/unrelated nearby events and A→B request switching;
+- authoritative terminal snapshot guard для answer controls;
+- answer Realtime controller;
+- nearby-answer coordinator;
 - nearby event source contract;
-- deterministic nearby event source contract E2E harness.
+- Supabase `create_request` adapter contract + page bridge;
+- Supabase `answer_request` adapter contract + page bridge;
+- deterministic E2E harnesses для create, answer, accuracy, switching и двухпользовательского request_id flow.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -68,7 +59,9 @@
 - request lifecycle `SEARCHING → ANSWERED / EXPIRED / CANCELLED`;
 - durable notification queue и retry contract;
 - Web Push subscriptions;
-- Realtime + notification flow.
+- Realtime + notification flow;
+- draft RPC `public.create_request(text, latitude, longitude)`;
+- draft RPC `public.answer_request(request_id, answer)`.
 
 Все SQL-файлы в `now/backend/` пока являются **draft migrations**. Их нельзя применять к старой или любой другой базе.
 
@@ -76,15 +69,20 @@
 
 Для нового проекта используется только отдельная Supabase-база. Старую инфраструктуру STO-NSK не подключаем.
 
+## Текущий интеграционный статус
+
+Browser seams для create и answer уже соответствуют зафиксированным draft RPC и проходят deterministic rehearsal. Реальный Supabase client намеренно не создаётся кодом проекта: он должен быть injected только в отдельном новом Supabase environment.
+
+`now/index.html` остаётся baseline и не переводился насильно на новый flow. Интеграционная проверка проводится через `index-integrated.html` и отдельные E2E harnesses.
+
 ## Следующий этап
 
-1. Подключить `main-ui-realtime-bridge.js` к `index.html` одним `<script src="/now/main-ui-realtime-bridge.js"></script>`, сохранив текущий inline demo flow при отсутствии adapters.
-2. Подключить create-request adapter: геолокация → `requests`.
-3. Подключить реальный nearby event source, реализующий `NowNearbyEventSourceContract`, к `main-ui-answer-nearby-coordinator.js`, затем `main-ui-answer-realtime-controller.js`, `main-ui-answer-bridge.js` и реальный answer adapter.
-4. Связать `notification_events` с Web Push delivery worker.
-5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
-6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
-7. Проверить production UI lifecycle на reconnect/terminal/switch сценариях.
+1. Создать отдельный **новый Supabase project** для «Сейчас».
+2. Применить draft migrations только туда после проверки порядка миграций и RLS.
+3. Inject authenticated Supabase client в integration environment.
+4. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
+5. Проверить reconnect/expiry/duplicate-answer/terminal lifecycle в реальном браузере.
+6. После этого привязать `now-mvp` к отдельному preview hosting target и только затем переходить к production release.
 
 ## Принцип MVP
 
