@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now integrated answer bridge E2E</title>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const frame = document.createElement('iframe');
+  frame.src = './index-integrated.html';
+  frame.style.width = '100%';
+  frame.style.height = '720px';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+
+  const win = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('index-integrated.html load timeout')), 5000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(frame.contentWindow); }, { once: true });
+  });
+
+  const bridgeScript = win.document.createElement('script');
+  bridgeScript.src = './main-ui-answer-bridge.js';
+  win.document.head.appendChild(bridgeScript);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('answer bridge load timeout')), 5000);
+    bridgeScript.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+    bridgeScript.addEventListener('error', () => { clearTimeout(timer); reject(new Error('answer bridge load failed')); }, { once: true });
+  });
+
+  let calls = 0;
+  let lastPayload = null;
+  win.NowAnswerRequestAdapter = {
+    async submitAnswer(payload) {
+      calls += 1;
+      lastPayload = payload;
+      return { ok: true, request_id: payload.request_id };
+    },
+  };
+
+  const bridge = win.NowMainUiAnswerBridge?.createOptionalBridge?.();
+  if (!bridge?.enabled) throw new Error('answer bridge did not enable on integrated UI');
+  if (!bridge.bind('req-integrated-1')) throw new Error('bind failed');
+
+  const button = win.document.querySelector('#incoming [data-answer]');
+  if (!button) throw new Error('integrated [data-answer] control not found');
+  button.click();
+
+  await new Promise(resolve => setTimeout(resolve, 50));
+  if (calls !== 1) throw new Error(`expected one submitAnswer call, got ${calls}`);
+  if (lastPayload?.request_id !== 'req-integrated-1') throw new Error('request_id mismatch');
+  if (lastPayload?.answer !== button.dataset.answer) throw new Error('answer payload mismatch');
+
+  out.textContent = 'PASS: integrated #incoming + [data-answer] bound and submitted exactly once with authoritative request_id.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
