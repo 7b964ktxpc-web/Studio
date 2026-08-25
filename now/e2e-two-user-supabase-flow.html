@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now two-user Supabase flow rehearsal</title>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const calls = [];
+  const createClient = {
+    async rpc(name, args) {
+      calls.push({ client: 'requester', name, args });
+      if (name !== 'create_request') throw new Error(`unexpected requester RPC: ${name}`);
+      return { data: [{ request_id: 'req-two-user-1', request_status: 'SEARCHING' }], error: null };
+    },
+  };
+  const answerClient = {
+    async rpc(name, args) {
+      calls.push({ client: 'responder', name, args });
+      if (name !== 'answer_request') throw new Error(`unexpected responder RPC: ${name}`);
+      return { data: [{ answer_id: 'ans-two-user-1', request_id: 'req-two-user-1', request_status: 'SEARCHING' }], error: null };
+    },
+  };
+
+  const load = (src) => new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error(`failed to load ${src}`));
+    document.head.appendChild(s);
+  });
+
+  await load('./supabase-create-request-adapter.js');
+  await load('./supabase-answer-request-adapter.js');
+  await load('./supabase-create-request-page-bridge.js');
+  await load('./supabase-answer-request-page-bridge.js');
+
+  window.supabase = createClient;
+  const createState = window.NowSupabaseCreateRequestPageBridge.install(createClient);
+  if (!createState.enabled) throw new Error(`create bridge disabled: ${createState.errors.join(', ')}`);
+  const createResult = await window.NowCreateRequestAdapter.createRequest({ text: 'Есть кто рядом?', latitude: 55.75, longitude: 37.61 });
+  if (createResult.request_id !== 'req-two-user-1') throw new Error('create request_id mismatch');
+
+  window.supabase = answerClient;
+  const answerState = window.NowSupabaseAnswerRequestPageBridge.install(answerClient);
+  if (!answerState.enabled) throw new Error(`answer bridge disabled: ${answerState.errors.join(', ')}`);
+  const answerResult = await window.NowAnswerRequestAdapter.submitAnswer({ request_id: createResult.request_id, answer: 'Да, я рядом' });
+  if (answerResult.request_id !== createResult.request_id) throw new Error('answer request_id mismatch');
+
+  const createCall = calls.find((x) => x.name === 'create_request');
+  const answerCall = calls.find((x) => x.name === 'answer_request');
+  if (!createCall || createCall.args.p_text !== 'Есть кто рядом?' || createCall.args.p_latitude !== 55.75 || createCall.args.p_longitude !== 37.61) {
+    throw new Error('create RPC payload mismatch');
+  }
+  if (!answerCall || answerCall.args.p_request_id !== 'req-two-user-1' || answerCall.args.p_answer !== 'Да, я рядом') {
+    throw new Error('answer RPC payload mismatch');
+  }
+  if ('p_radius_m' in createCall.args) throw new Error('radius leaked into create RPC');
+
+  out.textContent = 'PASS: requester create_request and responder answer_request preserve the same authoritative request_id and exact RPC contracts.';
+})().catch((error) => {
+  out.textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
