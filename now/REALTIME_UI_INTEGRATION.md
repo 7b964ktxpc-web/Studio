@@ -39,6 +39,8 @@ The bridge also installs an **opt-in capture-phase hook** on the existing `#ask`
 
 While the real create flow is in flight, the button is disabled and marked `aria-busy="true"`; subsequent clicks are consumed by the capture hook until the flow settles. The original button label is restored in all completion paths, including geolocation failure, accuracy rejection, create failure, and successful create → Realtime handoff. This prevents duplicate `createRequest()` calls without changing the adapter-disabled demo path.
 
+The bridge also provides safe browser-page default handlers when `#geo` exists. They consume only the existing `request_status/status` contract: `SEARCHING`, `ANSWERED`, `EXPIRED`, and `CANCELLED` become human-readable request states; `SUBSCRIBED`, `CHANNEL_ERROR`, and Realtime errors update the same lightweight status area. Unknown snapshot fields are ignored, and callers can override any default handler explicitly.
+
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
 ## Active request UI hook
@@ -115,6 +117,15 @@ The harness does not create a Supabase client and does not write production data
 
 The harness does not create a Supabase client and does not write production data.
 
+## Authoritative snapshot UI E2E
+
+`e2e-authoritative-snapshot-ui.html` loads the actual `index-integrated.html`, injects a deterministic Realtime adapter, starts a real request lifecycle, and delivers authoritative snapshots. It checks:
+
+1. `ANSWERED` reaches the page UI as `Ответ получен`;
+2. `EXPIRED` reaches the page UI as `Время ожидания истекло`;
+3. the UI update is driven by the authoritative snapshot callback, not by a demo timer;
+4. no Supabase client or production write is required.
+
 ## Deterministic browser E2E
 
 `e2e-realtime-page-bridge.html` loads the contract, lifecycle, and page bridge in a real browser context and checks:
@@ -179,4 +190,6 @@ The harness does not create a Supabase client and does not write production data
 21. The real create button E2E passes with deterministic ±25 m geolocation and injected adapters.
 22. Without both real adapters, the original demo button path remains unchanged.
 23. The duplicate click E2E passes with exactly one create call and restores the button after completion.
-24. No production Supabase client or credentials are created by the browser seam itself.
+24. Authoritative `ANSWERED` and `EXPIRED` snapshots reach the standalone UI through the browser page bridge.
+25. Default UI handlers ignore unknown snapshot fields and can be overridden by explicit bridge callbacks.
+26. No production Supabase client or credentials are created by the browser seam itself.
