@@ -1,8 +1,6 @@
-# «Сейчас» — API contract v1
+# «Сейчас» — API contract v1.1
 
-## Goal
-
-Сначала фиксируем контракт данных до подключения Supabase. Это снижает риск расхождения фронтенда и backend.
+Цель: зафиксировать контракт до подключения Supabase, чтобы frontend/backend не расходились.
 
 ## Entities
 
@@ -12,7 +10,7 @@
 - `text`: string, 1–160 chars
 - `latitude`: number, -90..90
 - `longitude`: number, -180..180
-- `radius_m`: integer, default 1500
+- `radius_m`: integer, default 1500, max 3000
 - `status`: `SEARCHING | ANSWERED | EXPIRED | CANCELLED`
 - `created_at`: ISO timestamp
 - `expires_at`: ISO timestamp
@@ -36,13 +34,17 @@
 ## Rules
 
 1. Never expose another user's exact coordinates.
-2. Matching uses distance on the server/database side.
-3. Presence is considered fresh only for a short TTL; stale presence must not receive requests.
-4. A request must expire automatically after its TTL.
-5. The client must treat realtime events as hints and refresh authoritative request state when needed.
-6. One user can answer a request only once unless an explicit edit flow is introduced later.
-7. Push notifications must not contain sensitive location data.
-8. The frontend keeps working when realtime is unavailable by polling the request state as a fallback.
+2. Matching is performed server-side/database-side.
+3. Presence is fresh only while `last_seen_at` is within 5 minutes.
+4. Presence must have a cleanup/expiry strategy; stale rows must never receive requests.
+5. A request expires after 10 minutes unless it is answered or cancelled.
+6. The client treats realtime events as hints and refreshes authoritative request state when needed.
+7. One user can answer a request only once in MVP.
+8. Push notifications must not contain sensitive location data or exact coordinates.
+9. A user must explicitly opt in to receiving nearby requests (`is_available=true`).
+10. Do not reveal the answerer's identity to the requester in MVP; show freshness/distance only.
+11. The same request must not generate duplicate pushes for the same recipient.
+12. Rate-limit request creation and answers server-side.
 
 ## Realtime events
 
@@ -51,9 +53,11 @@
 - `answer.created`
 - `presence.updated`
 
+Event payloads contain public state/IDs only. Private profile data and exact coordinates are never broadcast.
+
 ## MVP matching
 
-For a request, select fresh available users within `radius_m`. Start with 1.5 km default radius. Do not send to everyone in the city. Later add ranking by distance, recent answer quality, and rate limits.
+For a request, select fresh available users within `radius_m`. Start with a 1.5 km default radius. If there are too few candidates, the backend may expand it up to 3 km. Rank candidates by distance and freshness. Do not broadcast requests to everyone in the city.
 
 ## Error contract
 
