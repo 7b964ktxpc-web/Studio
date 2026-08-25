@@ -22,6 +22,7 @@ $('run').onclick=async()=>{
   if(!add('Preset question buttons exist',presets.length===4))return;
   presets[0].click();
   if(!add('Preset click updates question',d.querySelector('#question').value==='Есть очередь?'))return;
+  if(!add('Optional Realtime bridge is disabled without injected adapter',w.NowRequestRealtimeBridge?.enabled===false))return;
   if(!add('Demo starts without Realtime adapter',!w.NowRealtimeAdapter))return;
   if(!add('Demo starts without Supabase dependency',!w.supabase))return;
   $('meta').textContent='Smoke checks passed';
