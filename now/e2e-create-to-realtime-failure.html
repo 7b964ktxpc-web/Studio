@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Now — create to realtime failure E2E</title><style>body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}</style></head><body><main>
+<h1>Сейчас — create → Realtime failure E2E</h1>
+<div class="card"><button id="run">Запустить E2E</button><div id="steps"></div></div>
+<div class="card"><div>Starts: <b id="starts">0</b></div><div>Stops: <b id="stops">0</b></div><div>Active request after failure: <b id="active">—</b></div><div><b id="result">Ready</b></div></div>
+<script>
+const $=id=>document.getElementById(id);const add=(t,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+t;$('steps').appendChild(e);return ok};
+const frame=document.createElement('iframe');frame.src='index-integrated.html';frame.hidden=true;document.body.appendChild(frame);
+$('run').onclick=async()=>{
+  $('steps').innerHTML='';$('result').textContent='Running';$('starts').textContent='0';$('stops').textContent='0';$('active').textContent='—';
+  await new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('timeout')),2000)}).catch(()=>{});
+  const w=frame.contentWindow;
+  if(!add('Create→Realtime hook is exposed',typeof w.NowCreateAndStartRequest==='function'))return;
+
+  let starts=0,stops=0;
+  w.NowCreateRequestAdapter={async createRequest(){return{request_id:'req-failure-e2e-001',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:0};}};
+  w.NowRealtimeAdapter={
+    async start(){starts+=1;throw new Error('deterministic realtime start failure');},
+    async stop(){stops+=1;}
+  };
+  const bridge=w.NowRealtimePageBridge.createOptionalBridge({});
+  w.NowRequestRealtimeBridge=bridge;
+  let failed=false;
+  try{await w.NowCreateAndStartRequest({text:'Ошибка Realtime',latitude:55.03,longitude:82.92});}catch(error){failed=error instanceof Error&&error.message==='deterministic realtime start failure';}
+  $('starts').textContent=String(starts);$('stops').textContent=String(stops);$('active').textContent=bridge.getActiveRequestId()??'—';
+  if(!add('Original Realtime start error is preserved',failed))return;
+  if(!add('Realtime start attempted once',starts===1))return;
+  if(!add('Cleanup stop is attempted after failed start',stops===1))return;
+  if(!add('No active request remains after failure',bridge.getActiveRequestId()===null))return;
+  $('result').textContent='✅ Create→Realtime failure E2E passed';
+};
+</script></main></body></html>
