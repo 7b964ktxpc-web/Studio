@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Supabase presence page bridge E2E</title>
+<body>
+  <button id="presenceToggle">Я рядом</button>
+  <div id="presenceStatus">Не беспокоить</div>
+  <div id="presenceHint"></div>
+  <div id="accuracy"></div>
+  <div id="lastSeen"></div>
+  <div id="geo"></div>
+  <script src="supabase-presence-adapter.js"></script>
+  <script>
+  (() => {
+    const calls = [];
+    const client = {
+      rpc: async (name, args) => {
+        calls.push({ name, args });
+        if (name === 'upsert_my_presence') return { data: { available: true }, error: null };
+        if (name === 'disable_my_presence') return { data: null, error: null };
+        throw new Error(`unexpected rpc: ${name}`);
+      },
+    };
+    window.NowSupabasePresenceAdapter.installForTest = undefined;
+    const oldGeo = navigator.geolocation;
+    const positions = {
+      watchPosition(success) {
+        success({ coords: { latitude: 55.0302, longitude: 82.9204, accuracy: 24 } });
+        return 7;
+      },
+      clearWatch() {},
+    };
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: positions });
+
+    const installed = window.NowSupabasePresencePageBridge.install(client);
+    if (!installed) throw new Error('presence bridge did not install');
+    document.querySelector('#presenceToggle').click();
+    setTimeout(async () => {
+      if (calls.length !== 1 || calls[0].name !== 'upsert_my_presence') throw new Error('presence upsert mismatch');
+      if (calls[0].args.p_accuracy_m !== 24 || calls[0].args.p_available !== true) throw new Error('presence payload mismatch');
+      document.querySelector('#presenceToggle').click();
+      setTimeout(() => {
+        if (calls.length !== 2 || calls[1].name !== 'disable_my_presence') throw new Error('presence disable mismatch');
+        document.body.dataset.result = 'PASS';
+        console.log('PASS');
+      }, 0);
+    }, 0);
+  })();
+  </script>
+</body>
