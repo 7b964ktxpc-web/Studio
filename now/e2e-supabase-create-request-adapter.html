@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now Supabase create request adapter E2E</title>
+<pre id="out">running…</pre>
+<script src="./supabase-create-request-adapter.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+
+  const disabled = window.NowSupabaseCreateRequestAdapter.createOptionalAdapter(undefined);
+  if (disabled.enabled) throw new Error('adapter unexpectedly enabled without injected client');
+
+  const calls = [];
+  const client = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return {
+        data: [{ request_id: 'req-sb-1', request_status: 'SEARCHING', expires_at: '2030-01-01T00:00:00Z', queued_count: 1 }],
+        error: null,
+      };
+    },
+  };
+  const adapter = window.NowSupabaseCreateRequestAdapter.createOptionalAdapter(client);
+  if (!adapter.enabled) throw new Error('injected Supabase client did not enable adapter');
+
+  const result = await adapter.createRequest({ text: 'Есть очередь?', latitude: 55.75, longitude: 37.61 });
+  if (result.request_id !== 'req-sb-1') throw new Error('authoritative request_id mismatch');
+  if (calls.length !== 1) throw new Error(`expected one rpc call, got ${calls.length}`);
+  if (calls[0].name !== 'create_request') throw new Error(`unexpected RPC ${calls[0].name}`);
+  const args = calls[0].args || {};
+  if (args.p_text !== 'Есть очередь?' || args.p_latitude !== 55.75 || args.p_longitude !== 37.61) throw new Error('RPC args mismatch');
+  if (Object.prototype.hasOwnProperty.call(args, 'p_radius_m')) throw new Error('client radius leaked into final RPC contract');
+
+  const failing = window.NowSupabaseCreateRequestAdapter.createOptionalAdapter({
+    async rpc() { return { data: null, error: { code: '42501', message: 'Authentication required' } }; },
+  });
+  let caught = false;
+  try { await failing.createRequest({ text: 'ok', latitude: 55.75, longitude: 37.61 }); } catch (error) { caught = error?.message === 'Authentication required'; }
+  if (!caught) throw new Error('RPC error was not preserved');
+
+  out.textContent = 'PASS: Supabase create adapter calls the final create_request RPC, omits radius, preserves authoritative request_id, and does not create a client.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
