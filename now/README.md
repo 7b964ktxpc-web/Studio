@@ -40,7 +40,10 @@
 - reconnect snapshot recovery;
 - active request Realtime lifecycle controller with stale-callback protection;
 - opt-in main UI Realtime bridge for `index.html`;
-- deterministic main UI Realtime bridge E2E harness.
+- self-loading main UI Realtime bridge;
+- deterministic main UI Realtime bridge E2E harness;
+- regression gate for geolocation accuracy `> 50 m`;
+- regression gate for duplicate bridge script loads.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -60,7 +63,7 @@
 
 ## Следующий этап
 
-1. Подключить `main-ui-realtime-bridge.js` и его browser dependencies одной строкой/набором script tags в `index.html`, сохранив текущий inline demo flow при отсутствии adapters.
+1. Подключить `main-ui-realtime-bridge.js` к `index.html` одним `<script src="/now/main-ui-realtime-bridge.js"></script>`, сохранив текущий inline demo flow при отсутствии adapters.
 2. Подключить create-request adapter: геолокация → `requests`.
 3. Подключить answer adapter: nearby request → ответ одним тапом.
 4. Связать `notification_events` с Web Push delivery worker.
