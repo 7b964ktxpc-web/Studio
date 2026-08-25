@@ -41,8 +41,24 @@
             const row = payload?.new || {};
             const kind = String(row.kind || '').toUpperCase();
             if (String(row.request_id || '') !== normalized) return;
+
+            // REQUEST_ANSWERED is an answer notification, not a terminal request
+            // state. answer_request() intentionally keeps requests SEARCHING so
+            // more nearby confirmations can be collected. Only a real terminal
+            // lifecycle snapshot may become ANSWERED/EXPIRED/CANCELLED.
             if (kind === 'REQUEST_ANSWERED') {
-              handlers.onSnapshot?.({ request_id: normalized, request_status: 'ANSWERED', source: 'notification_events' });
+              handlers.onEvent?.({
+                request_id: normalized,
+                request_status: 'SEARCHING',
+                event_kind: 'REQUEST_ANSWERED',
+                source: 'notification_events',
+              });
+              handlers.onSnapshot?.({
+                request_id: normalized,
+                request_status: 'SEARCHING',
+                event_kind: 'REQUEST_ANSWERED',
+                source: 'notification_events',
+              });
             }
           },
         )
