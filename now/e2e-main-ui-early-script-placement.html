@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Now main UI early script placement regression</title>
+<script>
+  window.__earlyPlacement = true;
+</script>
+<script src="/now/main-ui-realtime-bridge.js"></script>
+<script>
+  window.__earlyPlacementBridgeLoaded = Boolean(window.NowMainUiRealtimeBridge);
+  window.addEventListener('DOMContentLoaded', () => {
+    const button = document.querySelector('#askBtn');
+    if (!button) throw new Error('ask button missing');
+    if (button.dataset.nowMainCreateHook !== '1') throw new Error('bridge did not install hook after DOMContentLoaded');
+    document.body.dataset.result = 'PASS';
+  }, { once: true });
+</script>
+<button id="askBtn" type="button">Спросить</button>
+<input id="question" value="Тест">
+<div id="geo"></div>
