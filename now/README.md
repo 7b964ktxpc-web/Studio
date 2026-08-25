@@ -47,7 +47,10 @@
 - regression gate for geolocation accuracy `> 50 m`;
 - regression gate for duplicate bridge script loads;
 - regression gate for late adapter injection racing the legacy inline handler;
-- regression gate for dependencies already loaded before bridge bootstrap.
+- regression gate for dependencies already loaded before bridge bootstrap;
+- opt-in main UI answer bridge;
+- deterministic main UI answer bridge E2E harness;
+- regression gate for one-answer submission and terminal `REQUEST_EXPIRED` / `ALREADY_ANSWERED` handling.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -69,7 +72,7 @@
 
 1. Подключить `main-ui-realtime-bridge.js` к `index.html` одним `<script src="/now/main-ui-realtime-bridge.js"></script>`, сохранив текущий inline demo flow при отсутствии adapters.
 2. Подключить create-request adapter: геолокация → `requests`.
-3. Подключить answer adapter: nearby request → ответ одним тапом.
+3. Подключить `main-ui-answer-bridge.js` к nearby request/Realtime событию и реальный answer adapter.
 4. Связать `notification_events` с Web Push delivery worker.
 5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
 6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
