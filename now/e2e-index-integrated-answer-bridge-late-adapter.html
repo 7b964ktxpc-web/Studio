@@ -1,0 +1,60 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now integrated answer bridge late adapter E2E</title>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const frame = document.createElement('iframe');
+  frame.src = './index-integrated.html';
+  frame.style.width = '100%';
+  frame.style.height = '720px';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+
+  const win = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('index-integrated.html load timeout')), 5000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(frame.contentWindow); }, { once: true });
+  });
+
+  const bridgeScript = win.document.createElement('script');
+  bridgeScript.src = './main-ui-answer-bridge.js';
+  win.document.head.appendChild(bridgeScript);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('answer bridge load timeout')), 5000);
+    bridgeScript.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+    bridgeScript.addEventListener('error', () => { clearTimeout(timer); reject(new Error('answer bridge load failed')); }, { once: true });
+  });
+
+  const bridgeGlobal = win.NowMainUiAnswerBridge;
+  if (!bridgeGlobal) throw new Error('public answer bridge global missing');
+  if (bridgeGlobal.enabled) throw new Error('bridge should stay disabled before adapter injection');
+  if (bridgeGlobal.bind('req-late-1')) throw new Error('bind must not pretend to activate without adapter');
+  if (bridgeGlobal.getActiveRequestId() !== 'req-late-1') throw new Error('pending request id was not retained');
+
+  let calls = 0;
+  let lastPayload = null;
+  win.NowAnswerRequestAdapter = {
+    async submitAnswer(payload) {
+      calls += 1;
+      lastPayload = payload;
+      return { ok: true, request_id: payload.request_id };
+    },
+  };
+
+  const button = win.document.querySelector('#incoming [data-answer]');
+  if (!button) throw new Error('integrated [data-answer] control not found');
+  button.click();
+
+  await new Promise(resolve => setTimeout(resolve, 50));
+  if (calls !== 1) throw new Error(`expected one submitAnswer call, got ${calls}`);
+  if (lastPayload?.request_id !== 'req-late-1') throw new Error('late adapter request_id mismatch');
+  if (lastPayload?.answer !== button.dataset.answer) throw new Error('late adapter answer mismatch');
+
+  out.textContent = 'PASS: late answer adapter injection activated pending request and intercepted the real integrated answer click exactly once.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
