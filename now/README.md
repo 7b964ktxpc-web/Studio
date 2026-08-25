@@ -1,4 +1,4 @@
-# Сейчас — MVP
+# «Сейчас» — MVP
 
 «Сейчас» — мобильный сервис локальной информации для Новосибирска: человек задаёт простой вопрос про конкретное место, а приложение ищет людей, которые находятся действительно рядом, и получает короткий ответ.
 
@@ -56,7 +56,9 @@
 - deterministic answer Realtime controller E2E harness;
 - opt-in nearby-answer coordinator;
 - deterministic nearby-answer coordinator E2E harness;
-- regression gate for malformed/unrelated nearby events and A→B request switching.
+- regression gate for malformed/unrelated nearby events and A→B request switching;
+- nearby event source contract;
+- deterministic nearby event source contract E2E harness.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -78,7 +80,7 @@
 
 1. Подключить `main-ui-realtime-bridge.js` к `index.html` одним `<script src="/now/main-ui-realtime-bridge.js"></script>`, сохранив текущий inline demo flow при отсутствии adapters.
 2. Подключить create-request adapter: геолокация → `requests`.
-3. Подключить реальный nearby event source к `main-ui-answer-nearby-coordinator.js`, затем `main-ui-answer-realtime-controller.js`, `main-ui-answer-bridge.js` и реальный answer adapter.
+3. Подключить реальный nearby event source, реализующий `NowNearbyEventSourceContract`, к `main-ui-answer-nearby-coordinator.js`, затем `main-ui-answer-realtime-controller.js`, `main-ui-answer-bridge.js` и реальный answer adapter.
 4. Связать `notification_events` с Web Push delivery worker.
 5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
 6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
