@@ -7,6 +7,7 @@
 - targets the existing main UI selectors `#askBtn`, `#question`, and `#geo`;
 - exposes its browser API as `window.NowMainUiRealtimeBridge`;
 - self-loads `realtime-ui-adapter-contract.js` and `realtime-ui-lifecycle.js` when those globals are not already available;
+- treats already-loaded dependency scripts as ready instead of waiting for an already-fired `load` event;
 - installs the `#askBtn` capture hook synchronously before asynchronous dependency bootstrap;
 - checks for the real create adapter at click time, so adapters injected immediately after bridge load cannot race the legacy inline handler;
 - uses the existing validated browser Realtime adapter contract and generation-safe lifecycle;
@@ -23,6 +24,8 @@
 
 `e2e-main-ui-realtime-bridge.html` loads the actual `index.html`, dynamically loads only `main-ui-realtime-bridge.js`, verifies that the bridge self-loads its two browser dependencies, injects deterministic in-memory adapters immediately after bridge load, and verifies both rejection and late-adapter success paths.
 
+`e2e-main-ui-preloaded-dependencies.html` separately preloads the browser dependencies before loading the bridge and verifies that the bridge does not wait forever for an already-fired dependency `load` event.
+
 1. the main page loads;
 2. `#question`, `#askBtn`, and `#geo` exist;
 3. the bridge installs its capture hook synchronously;
@@ -38,11 +41,12 @@
 13. the authoritative `request_id` returned by create is passed unchanged to Realtime;
 14. the question is cleared only after successful create → Realtime handoff;
 15. the button restores after the handoff;
-16. no Supabase dependency is required.
+16. no Supabase dependency is required;
+17. preloaded dependencies do not cause a stuck bridge initialization.
 
-The harness intentionally does not modify `index.html`; the current production/demo page remains the regression baseline until the seam is connected by an explicit script tag.
+The harnesses intentionally do not modify `index.html`; the current production/demo page remains the regression baseline until the seam is connected by an explicit script tag.
 
-The harness must use the exact exported global `window.NowMainUiRealtimeBridge`; a different global name is a test failure.
+The harnesses must use the exact exported global `window.NowMainUiRealtimeBridge`; a different global name is a test failure.
 
 ## Next integration step
 
