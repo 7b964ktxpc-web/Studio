@@ -5,6 +5,8 @@
     'supabase-nearby-notification-source.js',
     'main-ui-answer-realtime-controller.js',
     'main-ui-answer-nearby-coordinator.js',
+    'supabase-presence-adapter.js',
+    'supabase-presence-page-bridge.js',
   ];
 
   function loadScript(src) {
@@ -47,6 +49,7 @@
 
       window.NowSupabaseCreateRequestPageBridge?.install?.(client);
       window.NowSupabaseAnswerRequestPageBridge?.install?.(client);
+      window.NowSupabasePresencePageBridge?.install?.(client);
 
       if (window.NowRealtimePageBridge?.createOptionalBridge) {
         window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({});
@@ -71,8 +74,11 @@
             const title = incoming?.querySelector('[data-nearby-question]') || incoming?.querySelector('div[style*="font-size:18px"]');
             const distance = incoming?.querySelector('.distance');
             if (title && request.text) title.textContent = request.text;
-            if (distance && Number.isFinite(Number(request.distance_m))) {
-              distance.textContent = `📍 Ты примерно в ${Math.round(Number(request.distance_m))} м от места`;
+            if (distance) {
+              const distanceValue = Number(request.distance_m);
+              distance.textContent = Number.isFinite(distanceValue)
+                ? `📍 Ты примерно в ${Math.round(distanceValue)} м от места`
+                : '📍 Вопрос от человека рядом';
             }
           },
           onError: error => console.error('[Сейчас] nearby notification error', error),
