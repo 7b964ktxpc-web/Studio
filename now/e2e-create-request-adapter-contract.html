@@ -1,0 +1,48 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now create request adapter contract E2E</title>
+<pre id="out">running…</pre>
+<script src="./create-request-adapter-contract.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  let calls = 0;
+  const adapter = {
+    async createRequest(input) {
+      calls += 1;
+      return { request_id: 'req-contract-1', status: 'SEARCHING', echoed: input };
+    },
+  };
+
+  const valid = await window.NowCreateRequestAdapterContract.createRequest({
+    text: 'Есть очередь?',
+    latitude: 55.75,
+    longitude: 37.61,
+  }, adapter);
+  if (valid.request_id !== 'req-contract-1') throw new Error('authoritative request_id mismatch');
+  if (calls !== 1) throw new Error('expected exactly one adapter call');
+
+  let invalid = false;
+  try { await window.NowCreateRequestAdapterContract.createRequest({ text: '', latitude: 55.75, longitude: 37.61 }, adapter); } catch (error) { invalid = error.code === 'INVALID_REQUEST'; }
+  if (!invalid) throw new Error('empty text was accepted');
+
+  invalid = false;
+  try { await window.NowCreateRequestAdapterContract.createRequest({ text: 'x'.repeat(161), latitude: 55.75, longitude: 37.61 }, adapter); } catch (error) { invalid = error.code === 'INVALID_REQUEST'; }
+  if (!invalid) throw new Error('text >160 was accepted');
+
+  invalid = false;
+  try { await window.NowCreateRequestAdapterContract.createRequest({ text: 'ok', latitude: 91, longitude: 37.61 }, adapter); } catch (error) { invalid = error.code === 'LOCATION_REQUIRED'; }
+  if (!invalid) throw new Error('invalid latitude was accepted');
+
+  invalid = false;
+  try {
+    await window.NowCreateRequestAdapterContract.createRequest({ text: 'ok', latitude: 55.75, longitude: 37.61 }, { async createRequest() { return { status: 'SEARCHING' }; } });
+  } catch (error) { invalid = error.code === 'INVALID_REQUEST'; }
+  if (!invalid) throw new Error('missing request_id was accepted');
+
+  out.textContent = 'PASS: create request adapter validates 1–160 text, coordinates, and authoritative request_id without backend access.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
