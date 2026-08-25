@@ -5,7 +5,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 ## Required order
 
 1. `001_initial.sql`
-2. `002_rls_policies.sql`
+2. `002_rlS_policies.sql`
 3. `003_presence_lifecycle.sql`
 4. `004_private_location_access.sql`
 5. `004_request_lifecycle.sql`
@@ -24,6 +24,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 18. `017_realtime_notification_events.sql`
 19. `018_answer_event_dedup_scope.sql`
 20. `019_request_answer_read_rpc.sql`
+21. `020_finalize_request.sql`
 
 ## Important sequencing notes
 
@@ -37,6 +38,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 - `017` adds `public.notification_events` to the Supabase Realtime publication used by the browser notification source and requester answer stream.
 - `018` makes only `NEW_NEARBY_REQUEST` notifications idempotent; each accepted answer can now create its own `REQUEST_ANSWERED` event.
 - `019` adds a requester-only RPC returning answer text without responder identity or coordinates.
+- `020` keeps the existing `finalize_request(uuid) → boolean` contract, limits finalization to the requester, and emits the terminal `REQUEST_FINALIZED` Realtime event.
 
 ## Before applying
 
@@ -44,13 +46,15 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 - Enable the intended Auth method before exercising authenticated RPCs. The preview browser bootstrap uses Supabase Anonymous Sign-Ins so the browser receives an `authenticated` session without collecting PII.
 - Apply the complete sequence to that NEW project only.
 - Run Supabase security/performance advisors after the schema is applied.
-- Verify `create_request`, `nearby_recipients`, `nearby_request_for_answer`, `answer_request`, `my_request_answers`, and notification queue functions with authenticated test users before connecting production traffic.
+- Verify `create_request`, `nearby_recipients`, `nearby_request_for_answer`, `answer_request`, `my_request_answers`, `finalize_request`, and notification queue functions with authenticated test users before connecting production traffic.
 
 ## Browser contract after apply
 
 `create_request(text, latitude, longitude)` returns an authoritative `request_id`.
 
 `answer_request(request_id, answer)` returns the authoritative `request_id` and keeps the request in `SEARCHING` until explicit aggregation/finalization.
+
+`finalize_request(request_id)` is requester-only and returns `boolean`; when true it moves the request to `ANSWERED` and emits `REQUEST_FINALIZED`.
 
 `REQUEST_ANSWERED` is a non-terminal notification. `ANSWERED` is reserved for explicit request finalization.
 
