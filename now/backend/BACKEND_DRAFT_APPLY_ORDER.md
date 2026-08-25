@@ -5,7 +5,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 ## Required order
 
 1. `001_initial.sql`
-2. `002_rlS_policies.sql`
+2. `002_rls_policies.sql`
 3. `003_presence_lifecycle.sql`
 4. `004_private_location_access.sql`
 5. `004_request_lifecycle.sql`
