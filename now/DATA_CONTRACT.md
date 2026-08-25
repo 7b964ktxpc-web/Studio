@@ -1,18 +1,18 @@
-# «Сейчас» — data contract
+# «Сейчас» — data contract v1.3
 
 This contract defines the smallest backend model for the MVP. It intentionally contains no secrets and no production credentials.
 
 ## 1. requests
 
-A question asked by a user for a place or area.
+A question asked by a user for a specific place or point.
 
 - `id`: uuid
-- `author_id`: uuid, nullable for anonymous MVP mode
+- `author_id`: uuid, nullable for anonymous test mode
 - `text`: string, 1–160 characters
 - `lat`: number
 - `lng`: number
-- `radius_m`: integer, default 1500
-- `status`: `WAITING | ANSWERED | EXPIRED | CANCELLED`
+- `radius_m`: integer, default 50, max 250
+- `status`: `SEARCHING | ANSWERED | EXPIRED | CANCELLED`
 - `created_at`: timestamptz
 - `expires_at`: timestamptz
 
@@ -31,7 +31,11 @@ An opt-in signal that a person is currently available to answer nearby questions
 - `available`: boolean
 - `last_seen_at`: timestamptz
 
-Privacy rule: presence is used for matching and must not expose a user's exact location to another user.
+Presence policy:
+- considered fresh for 5 minutes only;
+- `available=false` never receives nearby-request push;
+- accuracy worse than 50 m is not eligible for automated matching;
+- exact coordinates are never exposed to other users.
 
 ## 3. answers
 
@@ -44,11 +48,11 @@ A short response to a request.
 - `distance_m`: integer, nullable
 - `created_at`: timestamptz
 
-The client should display freshness and approximate proximity, not exact coordinates.
+The client displays freshness and coarse proximity only, not exact coordinates or identity.
 
 ## 4. notification_events
 
-An internal event used later by push/Telegram adapters.
+An internal event used by push/Telegram adapters.
 
 - `id`: uuid
 - `user_id`: uuid
@@ -59,19 +63,25 @@ An internal event used later by push/Telegram adapters.
 
 ## Matching rules
 
-1. Match only requests with `status = WAITING`.
+1. Match only requests with `status = SEARCHING`.
 2. Ignore expired requests.
-3. Prefer people within 500 m, then 1 km, then 1.5 km.
-4. Do not send the same request repeatedly to the same person during a cooldown window.
-5. Do not reveal the request author's identity or exact location to the responder.
-6. A request is considered fresh for the UI only while `now() - created_at <= 10 minutes`.
+3. Match against the **request location**, never against the requester's current position.
+4. Candidate stages are **0–50 m → 50–100 m → 100–150 m → 150–250 m**.
+5. Never automatically match or notify beyond 250 m.
+6. Expand only when the previous stage does not produce enough eligible recipients.
+7. Prefer the nearest eligible recipients and stop once the recipient limit is reached.
+8. Do not send the same request repeatedly to the same person during the request/cooldown window.
+9. Do not notify the requester about their own request.
+10. A request is fresh for the UI for 10 minutes; after that it becomes `EXPIRED`.
 
 ## Realtime events
 
-The first production Realtime channel should publish:
+The first production Realtime channel should publish only safe public state:
 
-- new `requests` matching the viewer's approximate area;
-- new `answers` for the viewer's own request;
+- new requests relevant to an opted-in viewer;
+- new answers for the viewer's own request;
 - request status changes.
+
+Exact coordinates and private profile data must not be broadcast.
 
 Push notifications are a separate delivery layer and must not be required for the core database flow.
