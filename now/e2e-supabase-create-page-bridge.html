@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now Supabase create page bridge E2E</title>
+<pre id="out">running…</pre>
+<script src="./create-request-adapter-contract.js"></script>
+<script src="./supabase-create-request-adapter.js"></script>
+<script src="./supabase-create-request-page-bridge.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  let calls = 0;
+  let payload = null;
+  window.supabase = {
+    async rpc(name, params) {
+      calls += 1;
+      payload = { name, params };
+      return { data: [{ request_id: 'req-page-bridge-1', request_status: 'SEARCHING' }], error: null };
+    },
+  };
+
+  const installed = window.NowSupabaseCreateRequestPageBridge.install();
+  if (!installed.enabled) throw new Error(`page bridge disabled: ${installed.errors.join(', ')}`);
+
+  const adapter = window.NowCreateRequestAdapter;
+  if (!adapter?.enabled || typeof adapter.createRequest !== 'function') throw new Error('create adapter was not installed');
+
+  const result = await adapter.createRequest({ text: 'Есть очередь?', latitude: 55.75, longitude: 37.61 });
+  if (calls !== 1) throw new Error(`expected one RPC call, got ${calls}`);
+  if (payload?.name !== 'create_request') throw new Error('wrong RPC name');
+  if (payload?.params?.p_text !== 'Есть очередь?') throw new Error('text mismatch');
+  if (payload?.params?.p_latitude !== 55.75 || payload?.params?.p_longitude !== 37.61) throw new Error('coordinates mismatch');
+  if ('p_radius_m' in (payload?.params || {})) throw new Error('radius leaked into final RPC contract');
+  if (result?.request_id !== 'req-page-bridge-1') throw new Error('authoritative request_id mismatch');
+
+  out.textContent = 'PASS: injected Supabase client → page bridge → create adapter → create_request RPC.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
