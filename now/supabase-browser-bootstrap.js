@@ -7,6 +7,8 @@
     'main-ui-answer-nearby-coordinator.js',
     'supabase-presence-adapter.js',
     'supabase-presence-page-bridge.js',
+    'supabase-request-answers-adapter.js',
+    'main-ui-request-answers-bridge.js',
   ];
 
   function loadScript(src) {
@@ -54,6 +56,7 @@
       if (window.NowRealtimePageBridge?.createOptionalBridge) {
         window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({
           onSnapshot: snapshot => {
+            window.NowMainUiRequestAnswersBridge?.applySnapshot?.(snapshot);
             if (!status) return;
             const statusKind = String(snapshot?.request_status || '').toUpperCase();
             if (snapshot?.event_kind === 'REQUEST_ANSWERED') {
@@ -75,6 +78,7 @@
       const source = window.NowSupabaseNearbyNotificationSource?.createOptionalSource?.(client);
       const controller = window.NowMainUiAnswerRealtimeController?.create?.({
         bridge: window.NowMainUiAnswerBridge,
+        onSnapshot: snapshot => window.NowMainUiRequestAnswersBridge?.applySnapshot?.(snapshot),
         onError: error => console.error('[Сейчас] answer realtime error', error),
       });
 
