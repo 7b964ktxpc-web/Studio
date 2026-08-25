@@ -17,6 +17,29 @@
     };
   }
 
+  function createDefaultUiHandlers() {
+    const geo = document.querySelector('#geo');
+    if (!geo) return {};
+
+    return {
+      onSnapshot(snapshot) {
+        const status = String(snapshot?.request_status ?? snapshot?.status ?? '').toUpperCase();
+        if (status === 'ANSWERED') geo.textContent = 'Ответ получен';
+        else if (status === 'EXPIRED') geo.textContent = 'Время ожидания истекло';
+        else if (status === 'CANCELLED') geo.textContent = 'Запрос отменён';
+        else if (status === 'SEARCHING') geo.textContent = 'Ищем ответ рядом…';
+      },
+      onStatus(status) {
+        const normalized = String(status || '').toUpperCase();
+        if (normalized === 'SUBSCRIBED') geo.textContent = 'Связь с запросом установлена';
+        else if (normalized === 'CHANNEL_ERROR') geo.textContent = 'Не удалось подключиться к запросу';
+      },
+      onError() {
+        geo.textContent = 'Не удалось обновить запрос';
+      },
+    };
+  }
+
   function createOptionalBridge({ onSnapshot, onError, onStatus } = {}) {
     const dependencies = resolveDependencies();
     if (!dependencies.adapter || !dependencies.lifecycleApi) {
@@ -33,10 +56,11 @@
       });
     }
 
+    const defaults = createDefaultUiHandlers();
     const active = dependencies.lifecycleApi.createActiveRequestUiLifecycle(dependencies.adapter, {
-      onSnapshot,
-      onError,
-      onStatus,
+      onSnapshot: onSnapshot ?? defaults.onSnapshot,
+      onError: onError ?? defaults.onError,
+      onStatus: onStatus ?? defaults.onStatus,
     });
 
     return Object.freeze({
