@@ -34,7 +34,11 @@
 - presence UI states;
 - Supabase presence backend adapter;
 - единый presence service;
-- отдельный мобильный экран «Я рядом».
+- отдельный мобильный экран «Я рядом»;
+- authoritative request snapshot adapter;
+- Realtime → authoritative request binding;
+- reconnect snapshot recovery;
+- active request Realtime lifecycle controller with stale-callback protection.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -60,6 +64,7 @@
 4. Связать `notification_events` с Web Push delivery worker.
 5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
 6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
+7. Подключить `createActiveRequestRealtimeController()` к lifecycle активного запроса в основном UI; не допускать обновления UI от устаревшей подписки.
 
 ## Принцип MVP
 
