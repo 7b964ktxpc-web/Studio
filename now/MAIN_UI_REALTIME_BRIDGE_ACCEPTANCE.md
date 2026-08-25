@@ -5,6 +5,7 @@
 ## Contract
 
 - targets the existing main UI selectors `#askBtn`, `#question`, and `#geo`;
+- exposes its browser API as `window.NowMainUiRealtimeBridge`;
 - uses the existing validated browser Realtime adapter contract and generation-safe lifecycle;
 - does not create a Supabase client or fabricate request IDs;
 - without injected adapters the bridge is disabled and the current demo flow remains untouched;
@@ -25,6 +26,8 @@
 6. no Supabase dependency is required.
 
 The harness intentionally does not modify `index.html`; the current production/demo page remains the regression baseline until the seam is connected by an explicit script tag.
+
+The harness must use the exact exported global `window.NowMainUiRealtimeBridge`; a different global name is a test failure.
 
 ## Next integration step
 
