@@ -31,7 +31,7 @@ window.NowRealtimeAdapter = {
 
 `realtime-ui-page-bridge.js` is the opt-in browser bridge. It resolves the validated adapter and creates exactly one active-request UI lifecycle. When the adapter or lifecycle dependency is missing, it returns a safe disabled bridge and does not create a backend fallback.
 
-The demo page may load the bridge without changing its current offline behavior. The bridge does not create a Supabase client, credentials, or production writes.
+The standalone `index-integrated.html` now loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
 ## Deterministic browser E2E
 
@@ -53,8 +53,9 @@ The harness does not create a Supabase client and uses an in-memory adapter only
 2. brand and presence controls exist;
 3. the question input and all four preset buttons exist;
 4. the preset interaction still updates the question input;
-5. the page starts without an injected Realtime adapter;
-6. the page starts without a Supabase client dependency.
+5. the optional `NowRequestRealtimeBridge` is disabled when no adapter is injected;
+6. the page starts without an injected Realtime adapter;
+7. the page starts without a Supabase client dependency.
 
 This keeps the existing demo UI as the regression baseline while the Realtime bridge remains opt-in.
 
@@ -69,5 +70,5 @@ This keeps the existing demo UI as the regression baseline while the Realtime br
 7. Late callbacks from A are ignored after B becomes active.
 8. No callback from an inactive request may mutate the active request UI.
 9. The deterministic browser E2E passes the A → B → stale A scenario.
-10. The standalone UI smoke E2E passes without backend dependency.
+10. The standalone UI smoke E2E passes with the bridge disabled when no adapter is injected.
 11. No production Supabase client or credentials are created by the browser seam itself.
