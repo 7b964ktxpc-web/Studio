@@ -16,14 +16,19 @@
 
 ## E2E
 
-`e2e-main-ui-realtime-bridge.html` loads the actual `index.html`, dynamically loads the existing browser contract/lifecycle plus `main-ui-realtime-bridge.js`, injects deterministic in-memory adapters, and verifies:
+`e2e-main-ui-realtime-bridge.html` loads the actual `index.html`, dynamically loads the existing browser contract/lifecycle plus `main-ui-realtime-bridge.js`, injects deterministic in-memory adapters, and verifies the real button path.
 
 1. the main page loads;
-2. `#question` and `#askBtn` exist;
+2. `#question`, `#askBtn`, and `#geo` exist;
 3. the bridge is disabled without an injected adapter;
 4. the bridge enables after deterministic adapter injection;
-5. Realtime starts with the authoritative request ID returned by the create adapter;
-6. no Supabase dependency is required.
+5. the actual `#askBtn` enters a busy/disabled state;
+6. deterministic browser geolocation at ±25 m is accepted;
+7. `createRequest()` receives the actual question text and coordinates;
+8. the authoritative `request_id` returned by create is passed unchanged to Realtime;
+9. the question is cleared only after successful create → Realtime handoff;
+10. the button restores after the handoff;
+11. no Supabase dependency is required.
 
 The harness intentionally does not modify `index.html`; the current production/demo page remains the regression baseline until the seam is connected by an explicit script tag.
 
