@@ -2,10 +2,21 @@
 -- Draft only. Apply only to the NEW «Сейчас» Supabase project.
 -- Remove accidental PUBLIC execution from privileged/derived functions.
 
--- SECURITY DEFINER proximity discovery must never be callable by anon.
+-- SECURITY DEFINER proximity discovery must never be callable by anon/public.
 revoke execute on function public.nearby_recipients(uuid, integer) from public;
 revoke execute on function public.nearby_recipients(uuid, integer) from anon;
 grant execute on function public.nearby_recipients(uuid, integer) to authenticated;
+
+-- Notification queue functions are worker-only. Never expose their privileged
+-- mutation/claim paths to browser or anonymous callers.
+revoke execute on function public.dispatch_nearby_request(uuid, integer) from public;
+revoke execute on function public.dispatch_nearby_request(uuid, integer) from anon;
+revoke execute on function public.claim_notification_events(integer) from public;
+revoke execute on function public.claim_notification_events(integer) from anon;
+revoke execute on function public.mark_notification_delivered(uuid) from public;
+revoke execute on function public.mark_notification_delivered(uuid) from anon;
+revoke execute on function public.release_notification_event(uuid, text, integer) from public;
+revoke execute on function public.release_notification_event(uuid, text, integer) from anon;
 
 -- Answer-count is derived data and must never be exposed anonymously.
 revoke execute on function public.answer_count(uuid) from public;
