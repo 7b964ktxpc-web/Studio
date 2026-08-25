@@ -16,7 +16,6 @@ type SupabaseLike = {
 };
 
 const MAX_TEXT = 160;
-const ALLOWED_RADII = new Set([50, 100, 150, 250]);
 
 function validateCoordinates(latitude: number, longitude: number): void {
   if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
@@ -36,8 +35,9 @@ function normalizeResult(value: unknown): CreateRequestResult {
     throw new Error('Invalid create request response');
   }
 
-  const status = record.request_status;
-  if (status !== 'SEARCHING') throw new Error('Unexpected request status');
+  if (record.request_status !== 'SEARCHING') {
+    throw new Error('Unexpected request status');
+  }
 
   const queued = Number(record.queued_count);
   if (!Number.isInteger(queued) || queued < 0 || queued > 8) {
@@ -58,15 +58,11 @@ export function createSupabaseRequestAdapter(client: SupabaseLike) {
       text: string;
       latitude: number;
       longitude: number;
-      radiusM?: number;
     }): Promise<CreateRequestResult> {
       const text = input.text.trim();
       if (!text || text.length > MAX_TEXT) throw new Error('Invalid request text');
 
       validateCoordinates(input.latitude, input.longitude);
-
-      const radiusM = input.radiusM ?? 50;
-      if (!ALLOWED_RADII.has(radiusM)) throw new Error('Invalid request radius');
 
       const user = await client.auth?.getUser?.();
       if (!user?.data?.user?.id) throw new Error('Authentication required');
@@ -75,7 +71,6 @@ export function createSupabaseRequestAdapter(client: SupabaseLike) {
         p_text: text,
         p_latitude: input.latitude,
         p_longitude: input.longitude,
-        p_radius_m: radiusM,
       });
 
       if (result.error) throw new Error(result.error.message);
