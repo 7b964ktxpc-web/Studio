@@ -1,0 +1,41 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now integrated answer bridge smoke E2E</title>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const frame = document.createElement('iframe');
+  frame.src = './index-integrated.html';
+  frame.style.width = '100%';
+  frame.style.height = '720px';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+
+  const win = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('index-integrated.html load timeout')), 5000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(frame.contentWindow); }, { once: true });
+  });
+
+  if (!win.NowMainUiAnswerBridge) throw new Error('answer bridge global missing from integrated page');
+  if (win.NowMainUiAnswerBridge.enabled) throw new Error('answer bridge must be disabled without adapter');
+
+  const incoming = win.document.querySelector('#incoming');
+  const button = win.document.querySelector('#incoming [data-answer]');
+  if (!incoming || !button) throw new Error('integrated answer UI missing');
+
+  incoming.hidden = false;
+  button.click();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  if (!incoming.hidden) throw new Error('legacy demo answer flow was changed by bridge boot');
+
+  const toast = win.document.querySelector('#toast');
+  if (!toast?.textContent?.includes('Ответ отправлен')) throw new Error('legacy answer toast regression');
+
+  out.textContent = 'PASS: integrated page loads answer bridge disabled without adapter and preserves legacy demo answer click behavior.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
