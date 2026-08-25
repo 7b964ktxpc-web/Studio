@@ -42,10 +42,12 @@
 - opt-in main UI Realtime bridge for `index.html`;
 - self-loading main UI Realtime bridge;
 - synchronous main UI button capture before async bootstrap;
+- preloaded-dependency-safe main UI Realtime bridge;
 - deterministic main UI Realtime bridge E2E harness;
 - regression gate for geolocation accuracy `> 50 m`;
 - regression gate for duplicate bridge script loads;
-- regression gate for late adapter injection racing the legacy inline handler.
+- regression gate for late adapter injection racing the legacy inline handler;
+- regression gate for dependencies already loaded before bridge bootstrap.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
