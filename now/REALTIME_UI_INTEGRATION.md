@@ -37,6 +37,8 @@ When Realtime start fails after request creation, the handoff performs a best-ef
 
 The bridge also installs an **opt-in capture-phase hook** on the existing `#ask` button. The hook is active only when both the validated Realtime bridge and a `window.NowCreateRequestAdapter` are present. In that mode, the button reads the question, obtains a fresh high-accuracy browser geolocation, enforces the project limit of **≤50 m**, and then calls `NowCreateAndStartRequest({text, latitude, longitude})`. Without both adapters, the original standalone demo click handler is untouched.
 
+While the real create flow is in flight, the button is disabled and marked `aria-busy="true"`; subsequent clicks are consumed by the capture hook until the flow settles. The original button label is restored in all completion paths, including geolocation failure, accuracy rejection, create failure, and successful create → Realtime handoff. This prevents duplicate `createRequest()` calls without changing the adapter-disabled demo path.
+
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
 ## Active request UI hook
@@ -99,6 +101,17 @@ The harness does not create a Supabase client and does not write production data
 4. the question is cleared only after successful create → Realtime handoff;
 5. the ≤50 m accuracy gate accepts the deterministic ±25 m location;
 6. a second page with no adapters keeps the existing demo button behavior.
+
+The harness does not create a Supabase client and does not write production data.
+
+## Duplicate create button click E2E
+
+`e2e-create-button-duplicate-click.html` loads the actual `index-integrated.html`, injects deterministic create and Realtime adapters, and holds the create operation open briefly. It dispatches two rapid clicks on the real `#ask` button and checks:
+
+1. `createRequest()` is called exactly once;
+2. the button is disabled while the real create → Realtime flow is in flight;
+3. the button is re-enabled after the flow completes;
+4. the duplicate click does not create a second request.
 
 The harness does not create a Supabase client and does not write production data.
 
@@ -165,4 +178,5 @@ The harness does not create a Supabase client and does not write production data
 20. When real adapters are present, the `#ask` button requires browser geolocation accuracy ≤50 m before calling createRequest.
 21. The real create button E2E passes with deterministic ±25 m geolocation and injected adapters.
 22. Without both real adapters, the original demo button path remains unchanged.
-23. No production Supabase client or credentials are created by the browser seam itself.
+23. The duplicate click E2E passes with exactly one create call and restores the button after completion.
+24. No production Supabase client or credentials are created by the browser seam itself.
