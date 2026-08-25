@@ -43,6 +43,7 @@
 <script src="realtime-ui-adapter-contract.js"></script>
 <script src="realtime-ui-lifecycle.js"></script>
 <script src="realtime-ui-page-bridge.js"></script>
+<script src="main-ui-answer-bridge.js"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
@@ -58,9 +59,6 @@
     getActiveRequestId(){ return null; },
   });
 
-  // Public hook for the real create-request adapter. This deliberately does not fabricate
-  // request IDs or backend state from the demo button. A real adapter may call this only
-  // after the authoritative request has been created and an ID is available.
   const startRequestRealtime = async requestId => {
     if (!window.NowRequestRealtimeBridge.enabled) return null;
     const normalized = String(requestId || '').trim();
@@ -96,7 +94,6 @@
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>$('#question').value=b.dataset.preset));
   $('#ask').addEventListener('click',()=>{if(!$('#question').value.trim()){toast('Напиши вопрос');return;}toast('Запрос отправлен людям рядом');$('#question').value='';});
   document.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{toast('Ответ отправлен');$('#incoming').hidden=true;}));
-  // Demo incoming request only when nearby mode is enabled. Production source will be validated Realtime/Web Push.
   setTimeout(()=>{if(state.on) $('#incoming').hidden=false;},8000);
   render();
 })();
