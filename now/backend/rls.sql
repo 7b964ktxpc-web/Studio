@@ -11,32 +11,25 @@ create policy "places_read_public"
   on places for select
   using (true);
 
--- A user may read their own questions; active questions may be read by authenticated clients
--- only when the UI needs to render an active request. Sensitive coordinates remain server-side.
-drop policy if exists "questions_read_owner_or_active" on questions;
-create policy "questions_read_owner_or_active"
+-- Raw questions contain owner and coordinates. They are not exposed directly to clients.
+drop policy if exists "questions_owner_only" on questions;
+create policy "questions_owner_only"
   on questions for select
-  using (
-    auth.uid() = user_id
-    or (auth.role() = 'authenticated' and status = 'waiting' and expires_at > now())
-  );
+  using (auth.uid() = user_id);
 
-drop policy if exists "answers_read_owner_or_active" on answers;
-create policy "answers_read_owner_or_active"
+drop policy if exists "answers_owner_only" on answers;
+create policy "answers_owner_only"
   on answers for select
   using (
     exists (
       select 1
       from questions q
       where q.id = answers.question_id
-        and (
-          q.user_id = auth.uid()
-          or (auth.role() = 'authenticated' and q.status = 'waiting' and q.expires_at > now())
-        )
+        and q.user_id = auth.uid()
     )
   );
 
--- Clients never read or write raw presence. All nearby matching happens server-side.
+-- Clients never read or write raw presence. Nearby matching happens server-side.
 drop policy if exists "presence_no_public_read" on presence;
 create policy "presence_no_public_read"
   on presence for select
@@ -48,6 +41,5 @@ create policy "presence_no_public_write"
   using (false)
   with check (false);
 
--- No direct client INSERT/UPDATE/DELETE policies are created for questions/answers.
--- Trusted Edge Functions own those mutations and enforce authentication, ownership,
--- freshness and anti-abuse rules.
+-- Questions/answers mutations are owned by trusted Edge Functions.
+-- This avoids exposing coordinates, ownership or write paths through the public API.
