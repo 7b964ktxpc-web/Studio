@@ -78,11 +78,66 @@
     return result;
   }
 
+  function installCreateRequestButtonHook() {
+    const button = document.querySelector('#ask');
+    if (!button || button.dataset.nowCreateRequestHook === '1') return false;
+    button.dataset.nowCreateRequestHook = '1';
+
+    button.addEventListener('click', event => {
+      const realtime = window.NowRequestRealtimeBridge;
+      const createAdapter = window.NowCreateRequestAdapter;
+      if (!realtime?.enabled || !createAdapter || typeof createAdapter.createRequest !== 'function') return;
+
+      const question = document.querySelector('#question');
+      const geo = document.querySelector('#geo');
+      const text = String(question?.value || '').trim();
+      if (!text) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      if (!navigator.geolocation?.getCurrentPosition) {
+        if (geo) geo.textContent = 'Геолокация недоступна';
+        return;
+      }
+
+      if (geo) geo.textContent = 'Проверяем точность геолокации…';
+      navigator.geolocation.getCurrentPosition(async position => {
+        const accuracy = Number(position?.coords?.accuracy);
+        const latitude = Number(position?.coords?.latitude);
+        const longitude = Number(position?.coords?.longitude);
+
+        if (!Number.isFinite(accuracy) || accuracy > 50 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+          if (geo) geo.textContent = 'Нужна точность геолокации ±50 м или лучше';
+          return;
+        }
+
+        try {
+          await createAndStartRequest({ text, latitude, longitude });
+          if (question) question.value = '';
+          if (geo) geo.textContent = `Вопрос отправлен · точность ±${Math.round(accuracy)} м`;
+        } catch (error) {
+          if (geo) geo.textContent = `Не удалось отправить: ${error instanceof Error ? error.message : 'ошибка'}`;
+        }
+      }, () => {
+        if (geo) geo.textContent = 'Не удалось получить геолокацию';
+      }, {
+        enableHighAccuracy: true,
+        maximumAge: 15000,
+        timeout: 15000,
+      });
+    }, true);
+
+    return true;
+  }
+
   window[globalKey] = Object.freeze({
     resolveDependencies,
     createOptionalBridge,
     createAndStartRequest,
+    installCreateRequestButtonHook,
   });
 
   window.NowCreateAndStartRequest = createAndStartRequest;
+  installCreateRequestButtonHook();
 })();
