@@ -40,10 +40,24 @@
 
   <section class="card nearby"><h2>Сейчас рядом</h2><div class="item"><div><b>МФЦ — площадь Труда</b><div class="sub">3 мин назад · 3 ответа</div></div><span class="badge yellow">Небольшая</span></div><div class="item"><div><b>ПВЗ на Фрунзе</b><div class="sub">5 мин назад</div></div><span class="badge green">Свободно</span></div><div class="item"><div><b>АЗС</b><div class="sub">2 мин назад</div></div><span class="badge green">Есть</span></div></section>
 </main>
+<script src="realtime-ui-adapter-contract.js"></script>
+<script src="realtime-ui-lifecycle.js"></script>
+<script src="realtime-ui-page-bridge.js"></script>
 <script>
 (() => {
   const $ = s => document.querySelector(s);
   const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2200); };
+
+  // Optional Realtime seam. With no injected adapter this is a safe disabled bridge;
+  // the existing standalone demo flow remains the source of truth.
+  window.NowRequestRealtimeBridge = window.NowRealtimePageBridge?.createOptionalBridge?.({}) ?? Object.freeze({
+    enabled:false,
+    errors:['Realtime page bridge unavailable'],
+    async start(){ return null; },
+    async stop(){},
+    getActiveRequestId(){ return null; },
+  });
+
   const state = { on:false, watch:null, last:null };
   const render = () => {
     const status=$('#presenceStatus'), hint=$('#presenceHint'), btn=$('#presenceToggle');
