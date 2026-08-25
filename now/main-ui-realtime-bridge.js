@@ -71,7 +71,7 @@
     button.dataset.nowMainCreateHook = '1';
 
     button.addEventListener('click', event => {
-      const bridge = window.NowMainRequestRealtimeBridge;
+      const bridge = window.NowMainUiRealtimeBridge;
       const createAdapter = window.NowCreateRequestAdapter;
       if (!bridge?.enabled || !createAdapter || typeof createAdapter.createRequest !== 'function') return;
 
@@ -149,6 +149,6 @@
     installCreateButtonHook,
   });
 
-  window.NowMainRequestRealtimeBridge = createOptionalBridge();
+  window.NowMainUiRealtimeBridge = createOptionalBridge();
   installCreateButtonHook();
 })();
