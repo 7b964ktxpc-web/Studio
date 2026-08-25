@@ -1,0 +1,36 @@
+{
+  "version": "0.1",
+  "basePath": "/api/now",
+  "requests": {
+    "create": {"method":"POST","path":"/requests","body":{"text":"string","lat":"number","lng":"number","radiusM":"number?"}},
+    "get": {"method":"GET","path":"/requests/:id"},
+    "answer": {"method":"POST","path":"/requests/:id/answers","body":{"answer":"string"}}
+  },
+  "presence": {
+    "heartbeat": {"method":"POST","path":"/presence","body":{"lat":"number","lng":"number","available":"boolean"}},
+    "remove": {"method":"DELETE","path":"/presence/:id"}
+  },
+  "matching": {
+    "strategy": [
+      "eligible presence must be available=true",
+      "exclude requester",
+      "prefer same place / within 500m",
+      "expand to 1000m when insufficient",
+      "expand to 1500m as final radius",
+      "never expose exact responder coordinates"
+    ],
+    "maxRecipients": 12,
+    "cooldownPerRecipientSeconds": 300
+  },
+  "freshness": {
+    "requestTtlSeconds": 600,
+    "freshSeconds": 300,
+    "staleSeconds": 1200
+  },
+  "realtime": [
+    "request.created",
+    "request.status_changed",
+    "answer.created",
+    "presence.updated"
+  ]
+}
