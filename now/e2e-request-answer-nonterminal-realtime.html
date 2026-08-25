@@ -1,0 +1,46 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>REQUEST_ANSWERED non-terminal E2E</title>
+<body><pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const snapshots = [];
+  const events = [];
+  const fakeClient = {
+    channel() {
+      const handlers = {};
+      return {
+        on(type, config, callback) { handlers.callback = callback; return this; },
+        subscribe(callback) { queueMicrotask(() => callback('SUBSCRIBED')); this.emit = row => handlers.callback?.({ new: row }); return this; },
+      };
+    },
+    removeChannel: async () => {},
+  };
+  window.NowSupabaseRealtimeAdapter = undefined;
+  const script = document.createElement('script');
+  script.src = 'supabase-realtime-adapter.js';
+  document.head.appendChild(script);
+  await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = reject; });
+
+  const adapter = window.NowSupabaseRealtimeAdapter.createOptionalAdapter(fakeClient);
+  let channel;
+  fakeClient.channel = () => {
+    channel = {
+      on(type, config, callback) { this.callback = callback; return this; },
+      subscribe(cb) { queueMicrotask(() => cb('SUBSCRIBED')); return this; },
+    };
+    return channel;
+  };
+  const live = window.NowSupabaseRealtimeAdapter.createOptionalAdapter(fakeClient);
+  await live.start('req-nonterminal-1', { onSnapshot: s => snapshots.push(s), onEvent: e => events.push(e) });
+  channel.callback?.({ new: { request_id: 'req-nonterminal-1', kind: 'REQUEST_ANSWERED' } });
+
+  if (snapshots.length !== 1) throw new Error('expected one snapshot');
+  if (snapshots[0].request_status !== 'SEARCHING') throw new Error('REQUEST_ANSWERED became terminal');
+  if (events[0]?.event_kind !== 'REQUEST_ANSWERED') throw new Error('answer event marker missing');
+  if (live.getActiveRequestId() !== 'req-nonterminal-1') throw new Error('request realtime stopped unexpectedly');
+
+  out.textContent = 'PASS';
+})().catch(error => { document.querySelector('#out').textContent = `FAIL: ${error?.message || error}`; });
+</script>
