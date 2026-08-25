@@ -1,19 +1,44 @@
 (() => {
   const globalKey = 'NowMainUiRealtimeBridge';
+  const dependencyScripts = ['realtime-ui-adapter-contract.js', 'realtime-ui-lifecycle.js'];
+
+  function isReady() {
+    return Boolean(window.NowRealtimeAdapterContract && window.__NOW_REALTIME_UI__?.createActiveRequestUiLifecycle);
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = [...document.scripts].find(script => script.src.endsWith(`/${src}`));
+      if (existing) {
+        if (existing.dataset.nowLoaded === '1') return resolve();
+        existing.addEventListener('load', resolve, { once: true });
+        existing.addEventListener('error', reject, { once: true });
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = new URL(src, document.currentScript?.src || window.location.href).href;
+      script.dataset.nowDependency = '1';
+      script.addEventListener('load', () => { script.dataset.nowLoaded = '1'; resolve(); }, { once: true });
+      script.addEventListener('error', reject, { once: true });
+      document.head.appendChild(script);
+    });
+  }
+
+  async function ensureDependencies() {
+    if (isReady()) return true;
+    for (const src of dependencyScripts) {
+      if (!isReady()) await loadScript(src);
+    }
+    return isReady();
+  }
 
   function resolveDependencies() {
     const contract = window.NowRealtimeAdapterContract;
     const lifecycleApi = window.__NOW_REALTIME_UI__;
     const resolved = contract?.resolveAdapter?.(window.NowRealtimeAdapter);
-
     if (!resolved?.adapter || !lifecycleApi?.createActiveRequestUiLifecycle) {
-      return {
-        adapter: null,
-        lifecycleApi: null,
-        errors: resolved?.errors || ['Realtime UI dependencies are not available'],
-      };
+      return { adapter: null, lifecycleApi: null, errors: resolved?.errors || ['Realtime UI dependencies are not available'] };
     }
-
     return { adapter: resolved.adapter, lifecycleApi, errors: [] };
   }
 
@@ -31,7 +56,6 @@
 
     const geo = document.querySelector('#geo');
     let active;
-
     const defaultSnapshot = snapshot => {
       const status = String(snapshot?.request_status ?? snapshot?.status ?? '').toUpperCase();
       if (!geo) return;
@@ -40,10 +64,7 @@
       else if (status === 'CANCELLED') geo.textContent = 'Запрос отменён';
       else if (status === 'SEARCHING') geo.textContent = 'Ищем ответ рядом…';
     };
-
-    const snapshotHandler = snapshot => {
-      (onSnapshot ?? defaultSnapshot)?.(snapshot);
-    };
+    const snapshotHandler = snapshot => (onSnapshot ?? defaultSnapshot)?.(snapshot);
 
     active = dependencies.lifecycleApi.createActiveRequestUiLifecycle(dependencies.adapter, {
       onSnapshot: snapshotHandler,
@@ -65,6 +86,24 @@
     });
   }
 
+  async function bootstrap() {
+    try {
+      await ensureDependencies();
+    } catch (error) {
+      window.NowMainUiRealtimeBridge = Object.freeze({
+        enabled: false,
+        errors: [error instanceof Error ? error.message : 'Failed to load Realtime UI dependencies'],
+        async start() { return null; },
+        async stop() {},
+        getActiveRequestId() { return null; },
+      });
+      return;
+    }
+
+    window.NowMainUiRealtimeBridge = createOptionalBridge();
+    installCreateButtonHook();
+  }
+
   function installCreateButtonHook() {
     const button = document.querySelector('#askBtn');
     if (!button || button.dataset.nowMainCreateHook === '1') return false;
@@ -74,7 +113,6 @@
       const bridge = window.NowMainUiRealtimeBridge;
       const createAdapter = window.NowCreateRequestAdapter;
       if (!bridge?.enabled || !createAdapter || typeof createAdapter.createRequest !== 'function') return;
-
       const question = document.querySelector('#question');
       const geo = document.querySelector('#geo');
       const text = String(question?.value || '').trim();
@@ -85,7 +123,6 @@
         event.stopImmediatePropagation();
         return;
       }
-
       event.preventDefault();
       event.stopImmediatePropagation();
       button.dataset.nowMainCreateBusy = '1';
@@ -93,7 +130,6 @@
       button.setAttribute('aria-busy', 'true');
       const previousLabel = button.textContent;
       button.textContent = 'Отправляем…';
-
       const restore = () => {
         button.dataset.nowMainCreateBusy = '0';
         button.disabled = false;
@@ -106,7 +142,6 @@
         restore();
         return;
       }
-
       if (geo) geo.textContent = 'Проверяем точность геолокации…';
       navigator.geolocation.getCurrentPosition(async position => {
         const accuracy = Number(position?.coords?.accuracy);
@@ -117,7 +152,6 @@
           restore();
           return;
         }
-
         try {
           const result = await createAdapter.createRequest({ text, latitude, longitude });
           const requestId = String(result?.request_id || '').trim();
@@ -133,22 +167,24 @@
       }, () => {
         if (geo) geo.textContent = 'Не удалось получить геолокацию';
         restore();
-      }, {
-        enableHighAccuracy: true,
-        maximumAge: 15000,
-        timeout: 15000,
-      });
+      }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 15000 });
     }, true);
-
     return true;
   }
 
-  window[globalKey] = Object.freeze({
-    resolveDependencies,
-    createOptionalBridge,
-    installCreateButtonHook,
+  window[globalKey] = Object.freeze({ resolveDependencies, createOptionalBridge, ensureDependencies, installCreateButtonHook });
+  window.NowMainUiRealtimeBridge = Object.freeze({
+    enabled: false,
+    errors: [],
+    start: async requestId => {
+      await ensureDependencies();
+      const bridge = createOptionalBridge();
+      if (!bridge.enabled) return null;
+      window.NowMainUiRealtimeBridge = bridge;
+      return bridge.start(requestId);
+    },
+    stop: async () => {},
+    getActiveRequestId: () => null,
   });
-
-  window.NowMainUiRealtimeBridge = createOptionalBridge();
-  installCreateButtonHook();
+  bootstrap();
 })();
