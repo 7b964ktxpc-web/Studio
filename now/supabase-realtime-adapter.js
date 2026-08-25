@@ -26,6 +26,25 @@
       }
     };
 
+    const emitAnswerSnapshot = async (normalized, handlers) => {
+      let answers = [];
+      if (typeof resolved.client.rpc === 'function') {
+        const lookup = await resolved.client.rpc('my_request_answers', { p_request_id: normalized });
+        if (!lookup.error && Array.isArray(lookup.data)) answers = lookup.data;
+      }
+
+      const payload = {
+        request_id: normalized,
+        request_status: 'SEARCHING',
+        event_kind: 'REQUEST_ANSWERED',
+        source: 'notification_events',
+        answers,
+        latest_answer: answers.length ? answers[answers.length - 1] : null,
+      };
+      handlers.onEvent?.(payload);
+      handlers.onSnapshot?.(payload);
+    };
+
     const start = async (requestId, handlers = {}) => {
       const normalized = String(requestId || '').trim();
       if (!normalized) throw new Error('requestId is required');
@@ -42,23 +61,11 @@
             const kind = String(row.kind || '').toUpperCase();
             if (String(row.request_id || '') !== normalized) return;
 
-            // REQUEST_ANSWERED is an answer notification, not a terminal request
-            // state. answer_request() intentionally keeps requests SEARCHING so
-            // more nearby confirmations can be collected. Only a real terminal
-            // lifecycle snapshot may become ANSWERED/EXPIRED/CANCELLED.
+            // REQUEST_ANSWERED is an answer event, not a terminal request state.
+            // answer_request() keeps the request SEARCHING so more confirmations
+            // can be collected. Only a real terminal lifecycle event ends it.
             if (kind === 'REQUEST_ANSWERED') {
-              handlers.onEvent?.({
-                request_id: normalized,
-                request_status: 'SEARCHING',
-                event_kind: 'REQUEST_ANSWERED',
-                source: 'notification_events',
-              });
-              handlers.onSnapshot?.({
-                request_id: normalized,
-                request_status: 'SEARCHING',
-                event_kind: 'REQUEST_ANSWERED',
-                source: 'notification_events',
-              });
+              Promise.resolve(emitAnswerSnapshot(normalized, handlers)).catch(error => handlers.onError?.(error));
             }
           },
         )
