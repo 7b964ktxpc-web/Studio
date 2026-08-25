@@ -87,6 +87,93 @@
     });
   }
 
+  function findCreateButton() {
+    return document.querySelector('#askBtn, #ask');
+  }
+
+  async function handleCreateClick(button, event) {
+    let bridge = window.NowMainUiRealtimeBridge;
+    const createAdapter = window.NowCreateRequestAdapter;
+    if (!createAdapter || typeof createAdapter.createRequest !== 'function') return;
+
+    if (button.dataset.nowMainCreateBusy === '1') {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    if (!bridge?.enabled) {
+      try {
+        await ensureDependencies();
+        bridge = createOptionalBridge();
+        if (!bridge.enabled) return;
+        window.NowMainUiRealtimeBridge = bridge;
+      } catch (_) {
+        return;
+      }
+    }
+
+    const question = document.querySelector('#question');
+    const geo = document.querySelector('#geo');
+    const text = String(question?.value || '').trim();
+    if (!text) return;
+
+    button.dataset.nowMainCreateBusy = '1';
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    const previousLabel = button.textContent;
+    button.textContent = 'Отправляем…';
+    const restore = () => {
+      button.dataset.nowMainCreateBusy = '0';
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.textContent = previousLabel;
+    };
+
+    if (!navigator.geolocation?.getCurrentPosition) {
+      if (geo) geo.textContent = 'Геолокация недоступна';
+      restore();
+      return;
+    }
+    if (geo) geo.textContent = 'Проверяем точность геолокации…';
+    navigator.geolocation.getCurrentPosition(async position => {
+      const accuracy = Number(position?.coords?.accuracy);
+      const latitude = Number(position?.coords?.latitude);
+      const longitude = Number(position?.coords?.longitude);
+      if (!Number.isFinite(accuracy) || accuracy > 50 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        if (geo) geo.textContent = 'Нужна точность геолокации ±50 м или лучше';
+        restore();
+        return;
+      }
+      try {
+        const result = await createAdapter.createRequest({ text, latitude, longitude });
+        const requestId = String(result?.request_id || '').trim();
+        if (!requestId) throw new Error('Create request adapter returned no request_id');
+        await bridge.start(requestId);
+        if (question) question.value = '';
+        if (geo) geo.textContent = `Вопрос отправлен · точность ±${Math.round(accuracy)} м`;
+      } catch (error) {
+        if (geo) geo.textContent = `Не удалось отправить: ${error instanceof Error ? error.message : 'ошибка'}`;
+      } finally {
+        restore();
+      }
+    }, () => {
+      if (geo) geo.textContent = 'Не удалось получить геолокацию';
+      restore();
+    }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 15000 });
+  }
+
+  function installCreateButtonHook() {
+    const button = findCreateButton();
+    if (!button || button.dataset.nowMainCreateHook === '1') return false;
+    button.dataset.nowMainCreateHook = '1';
+    button.addEventListener('click', event => handleCreateClick(button, event), true);
+    return true;
+  }
+
   async function bootstrap() {
     try {
       await ensureDependencies();
@@ -106,88 +193,6 @@
     installCreateButtonHook();
   }
 
-  function installCreateButtonHook() {
-    const button = document.querySelector('#askBtn');
-    if (!button || button.dataset.nowMainCreateHook === '1') return false;
-    button.dataset.nowMainCreateHook = '1';
-
-    button.addEventListener('click', async event => {
-      let bridge = window.NowMainUiRealtimeBridge;
-      const createAdapter = window.NowCreateRequestAdapter;
-      if (!createAdapter || typeof createAdapter.createRequest !== 'function') return;
-
-      if (button.dataset.nowMainCreateBusy === '1') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
-
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      if (!bridge?.enabled) {
-        try {
-          await ensureDependencies();
-          bridge = createOptionalBridge();
-          if (!bridge.enabled) return;
-          window.NowMainUiRealtimeBridge = bridge;
-        } catch (_) {
-          return;
-        }
-      }
-
-      const question = document.querySelector('#question');
-      const geo = document.querySelector('#geo');
-      const text = String(question?.value || '').trim();
-      if (!text) return;
-
-      button.dataset.nowMainCreateBusy = '1';
-      button.disabled = true;
-      button.setAttribute('aria-busy', 'true');
-      const previousLabel = button.textContent;
-      button.textContent = 'Отправляем…';
-      const restore = () => {
-        button.dataset.nowMainCreateBusy = '0';
-        button.disabled = false;
-        button.removeAttribute('aria-busy');
-        button.textContent = previousLabel;
-      };
-
-      if (!navigator.geolocation?.getCurrentPosition) {
-        if (geo) geo.textContent = 'Геолокация недоступна';
-        restore();
-        return;
-      }
-      if (geo) geo.textContent = 'Проверяем точность геолокации…';
-      navigator.geolocation.getCurrentPosition(async position => {
-        const accuracy = Number(position?.coords?.accuracy);
-        const latitude = Number(position?.coords?.latitude);
-        const longitude = Number(position?.coords?.longitude);
-        if (!Number.isFinite(accuracy) || accuracy > 50 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-          if (geo) geo.textContent = 'Нужна точность геолокации ±50 м или лучше';
-          restore();
-          return;
-        }
-        try {
-          const result = await createAdapter.createRequest({ text, latitude, longitude });
-          const requestId = String(result?.request_id || '').trim();
-          if (!requestId) throw new Error('Create request adapter returned no request_id');
-          await bridge.start(requestId);
-          if (question) question.value = '';
-          if (geo) geo.textContent = `Вопрос отправлен · точность ±${Math.round(accuracy)} м`;
-        } catch (error) {
-          if (geo) geo.textContent = `Не удалось отправить: ${error instanceof Error ? error.message : 'ошибка'}`;
-        } finally {
-          restore();
-        }
-      }, () => {
-        if (geo) geo.textContent = 'Не удалось получить геолокацию';
-        restore();
-      }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 15000 });
-    }, true);
-    return true;
-  }
-
   window[globalKey] = Object.freeze({ resolveDependencies, createOptionalBridge, ensureDependencies, installCreateButtonHook });
   window.NowMainUiRealtimeBridge = Object.freeze({
     enabled: false,
@@ -205,8 +210,6 @@
 
   const installWhenReady = () => installCreateButtonHook();
   installWhenReady();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installWhenReady, { once: true });
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installWhenReady, { once: true });
   bootstrap();
 })();
