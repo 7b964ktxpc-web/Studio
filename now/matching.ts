@@ -22,6 +22,7 @@ export type MatchCandidate = Presence & {
 export const MATCH_STAGES_M = [50, 100, 150, 250] as const;
 export const DEFAULT_MAX_RECIPIENTS = 8;
 export const PRESENCE_TTL_MS = 5 * 60 * 1000;
+export const MAX_ACCURACY_M = 50;
 
 function toRad(value: number): number {
   return (value * Math.PI) / 180;
@@ -46,7 +47,11 @@ export function distanceMeters(
 
 export function isFresh(updatedAt: string, now = Date.now()): boolean {
   const timestamp = Date.parse(updatedAt);
-  return !Number.isNaN(timestamp) && now - timestamp >= 0 && now - timestamp <= PRESENCE_TTL_MS;
+  return (
+    !Number.isNaN(timestamp) &&
+    now - timestamp >= 0 &&
+    now - timestamp <= PRESENCE_TTL_MS
+  );
 }
 
 function stageFor(distanceM: number): number | null {
@@ -54,24 +59,30 @@ function stageFor(distanceM: number): number | null {
   return index === -1 ? null : index;
 }
 
+function isEligible(person: Presence, requesterId: string, now: number): boolean {
+  if (person.userId === requesterId) return false;
+  if (!person.available) return false;
+  if (!isFresh(person.updatedAt, now)) return false;
+  if (!Number.isFinite(person.lat) || !Number.isFinite(person.lng)) return false;
+  if (person.accuracyM !== null && person.accuracyM > MAX_ACCURACY_M) return false;
+  return true;
+}
+
 /**
  * Select the nearest opt-in users, expanding only when a stage has too few candidates.
- * The request location is the center of matching; requester coordinates are never used
- * as a substitute for the place being asked about.
+ * Matching is always centered on the place/request coordinates, never on the requester.
  */
 export function selectRecipients(
   request: MatchRequest,
   presence: Presence[],
   now = Date.now(),
 ): MatchCandidate[] {
-  const maxRecipients = request.maxRecipients ?? DEFAULT_MAX_RECIPIENTS;
-  if (!Number.isInteger(maxRecipients) || maxRecipients < 1) return [];
+  const requested = request.maxRecipients ?? DEFAULT_MAX_RECIPIENTS;
+  if (!Number.isFinite(requested) || requested < 1) return [];
+  const maxRecipients = Math.min(Math.floor(requested), DEFAULT_MAX_RECIPIENTS);
 
   const candidates = presence
-    .filter((person) => person.available)
-    .filter((person) => person.userId !== request.requesterId)
-    .filter((person) => isFresh(person.updatedAt, now))
-    .filter((person) => person.accuracyM === null || person.accuracyM <= 50)
+    .filter((person) => isEligible(person, request.requesterId, now))
     .map((person) => ({
       ...person,
       distanceM: Math.round(
@@ -88,15 +99,15 @@ export function selectRecipients(
     );
 
   const selected: MatchCandidate[] = [];
+  const seen = new Set<string>();
+
   for (const stage of MATCH_STAGES_M.keys()) {
     for (const candidate of candidates) {
-      if (candidate.stage !== stage) continue;
-      if (selected.some((item) => item.userId === candidate.userId)) continue;
+      if (candidate.stage !== stage || seen.has(candidate.userId)) continue;
       selected.push(candidate);
+      seen.add(candidate.userId);
       if (selected.length >= maxRecipients) return selected;
     }
-    // No automatic jump over the next stage until every candidate in this stage
-    // has been considered. This preserves the nearest-first notification policy.
   }
 
   return selected;
