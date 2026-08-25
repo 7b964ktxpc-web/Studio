@@ -23,6 +23,7 @@ const ANSWER_EVENTS = Object.freeze({
 
 const REQUEST_STATUSES = new Set(['SEARCHING', 'ANSWERED', 'EXPIRED', 'CANCELLED']);
 const MAX_DEDUPE_KEYS = 256;
+const READY_STATUS = 'SUBSCRIBED';
 
 function createEventDeduper() {
   const seen = new Set<string>();
@@ -119,7 +120,13 @@ export function subscribeToRequestRealtime(
     },
   );
 
-  channel.subscribe(status => onStatus?.(status));
+  channel.subscribe(status => {
+    onStatus?.(status);
+
+    // Realtime can reconnect without replaying every missed postgres event.
+    // A successful (re)subscription therefore triggers an authoritative read.
+    if (status === READY_STATUS) refreshRequest(requestId);
+  });
 
   return {
     channelName,
