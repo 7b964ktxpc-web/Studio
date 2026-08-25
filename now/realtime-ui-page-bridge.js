@@ -60,7 +60,21 @@
 
     const start = window.NowStartRequestRealtime;
     if (typeof start !== 'function') throw new Error('Realtime start hook is not available');
-    await start(requestId);
+
+    try {
+      await start(requestId);
+    } catch (error) {
+      const stop = window.NowStopRequestRealtime;
+      if (typeof stop === 'function') {
+        try {
+          await stop();
+        } catch {
+          // Preserve the original Realtime start failure; cleanup is best effort.
+        }
+      }
+      throw error;
+    }
+
     return result;
   }
 
