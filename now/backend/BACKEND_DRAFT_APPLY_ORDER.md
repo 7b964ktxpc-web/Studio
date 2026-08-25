@@ -22,6 +22,8 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 16. `015_advisor_hardening.sql`
 17. `016_rls_initplan_and_notification_index.sql`
 18. `017_realtime_notification_events.sql`
+19. `018_answer_event_dedup_scope.sql`
+20. `019_request_answer_read_rpc.sql`
 
 ## Important sequencing notes
 
@@ -33,6 +35,8 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 - `015` hardens remaining privileged RPC permissions; PostGIS extension-owned service objects may still appear in Supabase advisors.
 - `016` replaces per-row `auth.uid()` policy evaluation with statement-scoped evaluation and adds the `notification_events(request_id, created_at)` covering index used by the realtime/event flow.
 - `017` adds `public.notification_events` to the Supabase Realtime publication used by the browser notification source and requester answer stream.
+- `018` makes only `NEW_NEARBY_REQUEST` notifications idempotent; each accepted answer can now create its own `REQUEST_ANSWERED` event.
+- `019` adds a requester-only RPC returning answer text without responder identity or coordinates.
 
 ## Before applying
 
@@ -40,12 +44,14 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 - Enable the intended Auth method before exercising authenticated RPCs. The preview browser bootstrap uses Supabase Anonymous Sign-Ins so the browser receives an `authenticated` session without collecting PII.
 - Apply the complete sequence to that NEW project only.
 - Run Supabase security/performance advisors after the schema is applied.
-- Verify `create_request`, `nearby_recipients`, `nearby_request_for_answer`, `answer_request`, and notification queue functions with authenticated test users before connecting production traffic.
+- Verify `create_request`, `nearby_recipients`, `nearby_request_for_answer`, `answer_request`, `my_request_answers`, and notification queue functions with authenticated test users before connecting production traffic.
 
 ## Browser contract after apply
 
 `create_request(text, latitude, longitude)` returns an authoritative `request_id`.
 
 `answer_request(request_id, answer)` returns the authoritative `request_id` and keeps the request in `SEARCHING` until explicit aggregation/finalization.
+
+`REQUEST_ANSWERED` is a non-terminal notification. `ANSWERED` is reserved for explicit request finalization.
 
 The staged matching policy remains `50 → 100 → 150 → 250 m`, with `250 m` as the absolute maximum.
