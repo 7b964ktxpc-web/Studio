@@ -19,6 +19,7 @@
         enabled: false,
         errors: resolved.errors,
         bind() { return false; },
+        applySnapshot() { return false; },
         unbind() {},
         getActiveRequestId() { return null; },
       });
@@ -26,6 +27,7 @@
 
     let activeRequestId = null;
     let busy = false;
+    let terminal = false;
     let bound = false;
 
     const setStatus = message => {
@@ -38,9 +40,40 @@
 
     const disableButtons = disabled => buttons.forEach(button => { button.disabled = disabled; });
 
+    const applySnapshot = snapshot => {
+      const snapshotRequestId = String(snapshot?.request_id || snapshot?.id || '').trim();
+      if (!snapshotRequestId || snapshotRequestId !== activeRequestId) return false;
+      const status = String(snapshot?.request_status ?? snapshot?.status ?? '').toUpperCase();
+      if (status === 'ANSWERED') {
+        terminal = true;
+        disableButtons(true);
+        setStatus('На этот запрос уже ответили');
+        return true;
+      }
+      if (status === 'EXPIRED') {
+        terminal = true;
+        disableButtons(true);
+        setStatus('Этот запрос больше не принимает ответы');
+        return true;
+      }
+      if (status === 'CANCELLED') {
+        terminal = true;
+        disableButtons(true);
+        setStatus('Этот запрос отменён');
+        return true;
+      }
+      if (status === 'SEARCHING') {
+        terminal = false;
+        if (!busy) disableButtons(false);
+        setStatus('Вопрос от человека рядом');
+        return true;
+      }
+      return false;
+    };
+
     const clickHandler = async event => {
       const button = event.currentTarget;
-      if (busy || !activeRequestId) return;
+      if (busy || terminal || !activeRequestId) return;
       event.preventDefault();
       event.stopImmediatePropagation();
 
@@ -60,6 +93,7 @@
 
         const requestId = activeRequestId;
         activeRequestId = null;
+        terminal = true;
         onSuccess?.({ request_id: requestId, answer, result });
         setStatus('Спасибо! Ваш ответ отправлен анонимно');
         buttons.forEach(item => { item.hidden = true; });
@@ -67,10 +101,12 @@
         const code = String(error?.code || '').toUpperCase();
         if (code === 'REQUEST_EXPIRED') {
           activeRequestId = null;
+          terminal = true;
           disableButtons(true);
           setStatus('Этот запрос больше не принимает ответы');
         } else if (code === 'ALREADY_ANSWERED') {
           activeRequestId = null;
+          terminal = true;
           disableButtons(true);
           setStatus('На этот запрос уже ответили');
         } else {
@@ -87,6 +123,7 @@
       const normalized = String(requestId || '').trim();
       if (!normalized) return false;
       activeRequestId = normalized;
+      terminal = false;
       incoming.style.display = '';
       buttons.forEach(button => {
         button.hidden = false;
@@ -101,6 +138,7 @@
     const unbind = () => {
       activeRequestId = null;
       busy = false;
+      terminal = false;
       buttons.forEach(button => {
         button.disabled = false;
         button.hidden = false;
@@ -113,6 +151,7 @@
       enabled: true,
       errors: [],
       bind,
+      applySnapshot,
       unbind,
       getActiveRequestId: () => activeRequestId,
     });
@@ -123,6 +162,7 @@
     enabled: false,
     errors: [],
     bind() { return false; },
+    applySnapshot() { return false; },
     unbind() {},
     getActiveRequestId() { return null; },
   });
