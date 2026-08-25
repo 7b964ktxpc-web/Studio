@@ -31,7 +31,20 @@ window.NowRealtimeAdapter = {
 
 `realtime-ui-page-bridge.js` is the opt-in browser bridge. It resolves the validated adapter and creates exactly one active-request UI lifecycle. When the adapter or lifecycle dependency is missing, it returns a safe disabled bridge and does not create a backend fallback.
 
-The standalone `index-integrated.html` now loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
+The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
+
+## Active request UI hook
+
+The standalone UI also exposes:
+
+```js
+window.NowStartRequestRealtime(requestId)
+window.NowStopRequestRealtime()
+```
+
+`NowStartRequestRealtime(requestId)` is intentionally an adapter hand-off rather than a create-request action. It accepts only an existing request ID and starts the validated Realtime lifecycle when the bridge is enabled. It does not fabricate IDs, create backend rows, or infer a request from the demo button.
+
+`NowStopRequestRealtime()` unsubscribes the active lifecycle. Both hooks are safe when no adapter is injected; the start hook returns `null` in that disabled state.
 
 ## Deterministic browser E2E
 
@@ -71,4 +84,6 @@ This keeps the existing demo UI as the regression baseline while the Realtime br
 8. No callback from an inactive request may mutate the active request UI.
 9. The deterministic browser E2E passes the A → B → stale A scenario.
 10. The standalone UI smoke E2E passes with the bridge disabled when no adapter is injected.
-11. No production Supabase client or credentials are created by the browser seam itself.
+11. `NowStartRequestRealtime(requestId)` rejects an empty request ID and does not fabricate one.
+12. `NowStopRequestRealtime()` is safe when no adapter is injected.
+13. No production Supabase client or credentials are created by the browser seam itself.
