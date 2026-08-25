@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сейчас — answer Realtime controller E2E</title></head>
+<body><button id="run">Запустить E2E</button><pre id="out"></pre><iframe id="app" src="index.html" style="width:100%;height:600px"></iframe>
+<script>
+const out=document.getElementById('out');const log=s=>out.textContent+=`${s}\n`;const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function load(w,src){await new Promise((ok,bad)=>{const s=w.document.createElement('script');s.src=src;s.onload=ok;s.onerror=bad;w.document.head.appendChild(s)})}
+document.getElementById('run').onclick=async()=>{out.textContent='';const w=document.getElementById('app').contentWindow;await wait(20);await load(w,'realtime-ui-adapter-contract.js');await load(w,'main-ui-answer-realtime-controller.js');if(!w.NowMainUiAnswerRealtimeController){log('FAIL controller export');return}let applied=[],started=[],stopped=0;const answerBridge={applySnapshot:s=>applied.push(s),};w.NowMainUiAnswerBridge=answerBridge;w.NowRealtimeAdapter={async start(id,h){started.push(id);await wait(10);h.onSnapshot({request_id:id,status:'SEARCHING'});h.onSnapshot({request_id:'other',status:'EXPIRED'});h.onSnapshot({request_id:id,status:'EXPIRED'});},async stop(){stopped++}};const c=w.NowMainUiAnswerRealtimeController.create();if(!log('enabled='+c.enabled))return;const r=await c.start('req-73');log('start='+r);log('active='+c.getActiveRequestId());log('applied='+JSON.stringify(applied));if(applied.length!==2||applied[0].request_id!=='req-73'||applied[1].request_status!=='EXPIRED')return;await c.stop();log('stopped='+stopped);log('answer Realtime controller E2E passed')};
+</script></body></html>
