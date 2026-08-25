@@ -2,7 +2,7 @@
   const globalKey = 'NowSupabaseNearbyNotificationSource';
 
   function resolveClient(candidate = window.supabase) {
-    const client = candidate && typeof candidate.channel === 'function' && typeof candidate.removeChannel === 'function'
+    const client = candidate && typeof candidate.channel === 'function' && typeof candidate.removeChannel === 'function' && typeof candidate.rpc === 'function'
       ? candidate
       : null;
     return client
@@ -33,19 +33,31 @@
               table: 'notification_events',
               filter: `user_id=eq.${userId}`,
             },
-            payload => {
+            async payload => {
               const row = payload?.new || {};
               const kind = String(row.kind || '').toUpperCase();
               const requestId = String(row.request_id || '').trim();
-              if (!requestId) return;
-              if (kind !== 'NEW_NEARBY_REQUEST') return;
-              handlers.onEvent?.({
-                kind: 'nearby.request',
-                request_id: requestId,
-                source: 'notification_events',
-                event_id: row.id || null,
-                created_at: row.created_at || null,
-              });
+              if (!requestId || kind !== 'NEW_NEARBY_REQUEST') return;
+
+              try {
+                const lookup = await resolved.client.rpc('nearby_request_for_answer', {
+                  p_request_id: requestId,
+                });
+                if (lookup.error) throw lookup.error;
+                const request = Array.isArray(lookup.data) ? lookup.data[0] : lookup.data;
+                if (!request?.id || String(request.id) !== requestId) return;
+
+                handlers.onEvent?.({
+                  kind: 'nearby.request',
+                  request_id: requestId,
+                  source: 'notification_events',
+                  event_id: row.id || null,
+                  created_at: row.created_at || null,
+                  request,
+                });
+              } catch (lookupError) {
+                handlers.onError?.(lookupError);
+              }
             },
           );
 
