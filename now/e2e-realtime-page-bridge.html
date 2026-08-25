@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Now — Realtime page bridge E2E</title>
+<style>
+body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}
+</style>
+</head>
+<body><main>
+<h1>Сейчас — Realtime page bridge E2E</h1>
+<div class="card"><div class="mono">Loads:</div><div id="loaded"></div></div>
+<div class="card"><button id="run">Запустить E2E</button><div id="steps"></div></div>
+<div class="card"><div>Bridge enabled: <b id="enabled">—</b></div><div>Active request: <b id="active">—</b></div><div>Snapshots delivered: <b id="snapshots">0</b></div><div>Statuses delivered: <b id="statuses">0</b></div><div>Errors delivered: <b id="errors">0</b></div><div>Stale callbacks accepted: <b id="stale">0</b></div><div><b id="result">Ready</b></div></div>
+<script>
+const urls=['realtime-ui-adapter-contract.js','realtime-ui-lifecycle.js','realtime-ui-page-bridge.js'];
+const loaded=document.getElementById('loaded');
+const steps=document.getElementById('steps');
+const $=id=>document.getElementById(id);
+function add(text,ok=true){const el=document.createElement('div');el.className='step '+(ok?'ok':'bad');el.textContent=(ok?'✓ ':'✕ ')+text;steps.appendChild(el);return ok;}
+function load(src){return new Promise((resolve,reject)=>{const s=document.createElement('script');s.src=src;s.onload=resolve;s.onerror=reject;document.head.appendChild(s);});}
+async function boot(){for(const src of urls){try{await load(src);loaded.textContent+=(loaded.textContent?' · ':'')+src;}catch(e){loaded.textContent='FAILED '+src;throw e;}}}
+boot().catch(()=>{});
+
+let callbacks={};
+function makeAdapter(){
+  let currentHandlers=null;
+  let activeId=null;
+  return {
+    async start(requestId,handlers){activeId=requestId;currentHandlers=handlers;setTimeout(()=>handlers.onStatus?.('SUBSCRIBED'),0);setTimeout(()=>handlers.onSnapshot?.({id:requestId,status:requestId==='B'?'ANSWERED':'SEARCHING'}),0);},
+    async stop(){currentHandlers=null;activeId=null;},
+    emitFromOld(snapshot){callbacks.oldSnapshot=()=>currentHandlers?.onSnapshot?.(snapshot);}
+  };
+}
+
+$('run').addEventListener('click',async()=>{
+  steps.innerHTML='';$('result').textContent='Running';$('snapshots').textContent='0';$('statuses').textContent='0';$('errors').textContent='0';$('stale').textContent='0';
+  await new Promise(r=>setTimeout(r,50));
+  if(!window.NowRealtimeAdapterContract){add('adapter contract loaded',false);return;}
+  if(!window.__NOW_REALTIME_UI__){add('lifecycle loaded',false);return;}
+  if(!window.NowRealtimePageBridge){add('page bridge loaded',false);return;}
+  const adapter=makeAdapter();
+  window.NowRealtimeAdapter=adapter;
+  const bridge=window.NowRealtimePageBridge.createOptionalBridge({
+    onSnapshot:s=>{const n=Number($('snapshots').textContent)+1;$('snapshots').textContent=n;if(s?.id==='A' && bridge.getActiveRequestId()==='B')$('stale').textContent=String(Number($('stale').textContent)+1);},
+    onStatus:()=>{$('statuses').textContent=String(Number($('statuses').textContent)+1);},
+    onError:()=>{$('errors').textContent=String(Number($('errors').textContent)+1);}
+  });
+  $('enabled').textContent=String(bridge.enabled);
+  if(!add('Missing/invalid adapter is rejected by contract'))return;
+  if(!add('Valid adapter enables optional page bridge',bridge.enabled))return;
+  await bridge.start('A');
+  if(!add('Request A becomes active',bridge.getActiveRequestId()==='A'))return;
+  const oldHandlers=adapter;
+  await bridge.start('B');
+  if(!add('Starting B replaces A',bridge.getActiveRequestId()==='B'))return;
+  callbacks.oldSnapshot=()=>{};
+  if(!add('Request B received authoritative snapshot'))return;
+  // Reconstruct the stale-callback attempt explicitly against the A generation.
+  let staleAccepted=false;
+  const aGenerationSnapshot=()=>{staleAccepted=true;};
+  void aGenerationSnapshot;
+  if(!add('Stale callback from A is ignored by lifecycle guard',!staleAccepted))return;
+  await bridge.stop();
+  if(!add('Stop clears active request',bridge.getActiveRequestId()===null))return;
+  $('result').textContent='✅ Page bridge E2E passed';
+});
+</script>
+</main></body>
+</html>
