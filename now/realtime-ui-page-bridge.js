@@ -93,11 +93,30 @@
       const text = String(question?.value || '').trim();
       if (!text) return;
 
+      if (button.dataset.nowCreateRequestBusy === '1') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
       event.preventDefault();
       event.stopImmediatePropagation();
+      button.dataset.nowCreateRequestBusy = '1';
+      button.disabled = true;
+      button.setAttribute('aria-busy', 'true');
+      const previousLabel = button.textContent;
+      button.textContent = 'Отправляем…';
+
+      const restoreButton = () => {
+        button.dataset.nowCreateRequestBusy = '0';
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+        button.textContent = previousLabel;
+      };
 
       if (!navigator.geolocation?.getCurrentPosition) {
         if (geo) geo.textContent = 'Геолокация недоступна';
+        restoreButton();
         return;
       }
 
@@ -109,6 +128,7 @@
 
         if (!Number.isFinite(accuracy) || accuracy > 50 || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
           if (geo) geo.textContent = 'Нужна точность геолокации ±50 м или лучше';
+          restoreButton();
           return;
         }
 
@@ -118,9 +138,12 @@
           if (geo) geo.textContent = `Вопрос отправлен · точность ±${Math.round(accuracy)} м`;
         } catch (error) {
           if (geo) geo.textContent = `Не удалось отправить: ${error instanceof Error ? error.message : 'ошибка'}`;
+        } finally {
+          restoreButton();
         }
       }, () => {
         if (geo) geo.textContent = 'Не удалось получить геолокацию';
+        restoreButton();
       }, {
         enableHighAccuracy: true,
         maximumAge: 15000,
