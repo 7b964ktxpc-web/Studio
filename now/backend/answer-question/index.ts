@@ -7,18 +7,22 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const MAX_DISTANCE_M = 2000;
+const PRESENCE_FRESHNESS_MS = 5 * 60 * 1000;
 const ALLOWED_ANSWERS = new Set([
-  "Да, вижу",
-  "Нет, не вижу",
-  "Нет очереди",
-  "Очередь небольшая",
-  "Очередь большая",
-  "Не знаю",
-  "Работает",
-  "Не работает",
-  "Есть",
-  "Нет",
+  "Да, вижу", "Нет, не вижу", "Нет очереди", "Очередь небольшая", "Очередь большая",
+  "Не знаю", "Работает", "Не работает", "Есть", "Нет",
 ]);
+
+function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const r = 6_371_000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -46,7 +50,7 @@ Deno.serve(async (request) => {
     const service = createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
     const { data: question, error: questionError } = await service
       .from("questions")
-      .select("id,user_id,status,expires_at")
+      .select("id,user_id,status,expires_at,lat,lng,radius_m")
       .eq("id", body.questionId)
       .single();
 
@@ -58,14 +62,20 @@ Deno.serve(async (request) => {
 
     const { data: presence, error: presenceError } = await service
       .from("presence")
-      .select("user_id,updated_at,available")
+      .select("user_id,lat,lng,updated_at,available")
       .eq("user_id", data.user.id)
       .eq("available", true)
       .single();
 
     if (presenceError || !presence) return Response.json({ error: "Active location is required" }, { status: 403, headers: corsHeaders });
-    if (Date.now() - new Date(presence.updated_at).getTime() > 5 * 60 * 1000) {
+    if (Date.now() - new Date(presence.updated_at).getTime() > PRESENCE_FRESHNESS_MS) {
       return Response.json({ error: "Location is stale" }, { status: 403, headers: corsHeaders });
+    }
+
+    const distanceM = distanceMeters(question.lat, question.lng, presence.lat, presence.lng);
+    const allowedRadius = Math.min(Math.max(Number(question.radius_m ?? 1000), 300), MAX_DISTANCE_M);
+    if (distanceM > allowedRadius) {
+      return Response.json({ error: "You are outside the question radius" }, { status: 403, headers: corsHeaders });
     }
 
     const { data: existing } = await service
@@ -84,8 +94,6 @@ Deno.serve(async (request) => {
 
     if (insertError || !answer) return Response.json({ error: "Unable to save answer" }, { status: 500, headers: corsHeaders });
 
-    // Keep the question in `waiting` while fresh confirmations can continue arriving.
-    // A later expiry/aggregation step will move it to `answered` or `expired`.
     return Response.json({ ok: true, answer }, { headers: corsHeaders });
   } catch (error) {
     console.error(error);
