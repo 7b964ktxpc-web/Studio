@@ -21,6 +21,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 15. `014_dispatch_request_auth_contract.sql`
 16. `015_advisor_hardening.sql`
 17. `016_rls_initplan_and_notification_index.sql`
+18. `017_realtime_notification_events.sql`
 
 ## Important sequencing notes
 
@@ -31,6 +32,7 @@ This directory is a **draft schema package** for a NEW «Сейчас» Supabase
 - `014` narrows authenticated dispatch to the request owner and keeps worker-only notification claim/delivery functions unavailable to browser roles.
 - `015` hardens remaining privileged RPC permissions; PostGIS extension-owned service objects may still appear in Supabase advisors.
 - `016` replaces per-row `auth.uid()` policy evaluation with statement-scoped evaluation and adds the `notification_events(request_id, created_at)` covering index used by the realtime/event flow.
+- `017` adds `public.notification_events` to the Supabase Realtime publication used by the browser notification source and requester answer stream.
 
 ## Before applying
 
