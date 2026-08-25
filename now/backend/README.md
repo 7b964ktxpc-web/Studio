@@ -1,53 +1,24 @@
-# Backend contract — «Сейчас»
+# Backend contract — Сейчас
 
-Этот каталог готовит backend для отдельного Supabase-проекта «Сейчас». Старую базу STO-NSK не использовать.
+The backend is prepared for a standalone Supabase project. It must never use the old STO-NSK database.
 
-## Dispatch flow
+## Functions
 
-`POST /functions/v1/dispatch-question`
+- `create-question` — authenticated creation of a nearby question; validates coordinates/text, requires fresh presence, and limits active questions per user.
+- `heartbeat-presence` — authenticated location heartbeat. Stores only the latest coarse presence row server-side; clients cannot read the table directly.
+- `dispatch-question` — authenticated server-side matching of a waiting question to fresh nearby presence rows. It never returns recipient user IDs or coordinates.
+- `answer-question` — authenticated one-tap answer. The responder must have fresh presence, be inside the question radius, cannot answer their own question, and cannot answer twice.
 
-Request:
+## Privacy rules
 
-```json
-{
-  "questionId": "uuid",
-  "lat": 55.0302,
-  "lng": 82.9204,
-  "radiusM": 1000
-}
-```
+Raw presence, question ownership and exact coordinates are server-side data. Client reads should go through Edge Functions that return only the minimum data required by the UI.
 
-Response:
+## Question lifecycle
 
-```json
-{
-  "questionId": "uuid",
-  "radiusM": 1000,
-  "recipientCount": 3,
-  "recipients": [
-    { "userId": "uuid", "distanceM": 240 }
-  ],
-  "expiresAt": "2026-08-25T10:00:00Z"
-}
-```
+`waiting` → multiple fresh answers → aggregation/Realtime → `answered` or `expired`.
 
-## Rules
+A first answer does **not** close the question, because the product needs multiple confirmations to calculate a trustworthy local signal.
 
-- Matching is server-side; exact presence coordinates are never returned to the client.
-- Only fresh presence (last 5 minutes) participates in matching.
-- Radius is clamped to 300–2000 m.
-- A request is limited to 25 recipients.
-- A question expires after 10 minutes.
-- The function uses the Supabase service role only on the server.
-- Public RLS must not expose the `presence` table.
+## Current state
 
-## Next backend step
-
-After the standalone Supabase project exists:
-
-1. Apply `schema.sql`.
-2. Apply `backend/rls.sql`.
-3. Deploy `backend/dispatch-question/index.ts` as an Edge Function.
-4. Add authenticated presence heartbeats.
-5. Add answer creation and Realtime subscriptions.
-6. Add rate limiting and abuse controls before opening the service publicly.
+These functions are source-controlled only. No Supabase project has been created for «Сейчас» yet, so nothing here is deployed to production. The existing `sto-nsk` Supabase project is intentionally untouched.
