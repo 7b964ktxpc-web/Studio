@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Сейчас — index-integrated smoke E2E</title><style>
+body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:900px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}iframe{width:100%;height:720px;border:1px solid #ddd;border-radius:14px;background:#fff}
+button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}
+</style></head><body><main>
+<h1>Сейчас — standalone UI smoke E2E</h1>
+<div class="card"><div class="mono">Target: now/index-integrated.html</div><div id="meta">Loading…</div></div>
+<div class="card"><button id="run">Запустить smoke test</button><div id="steps"></div></div>
+<div class="card"><iframe id="app" src="index-integrated.html" title="Сейчас — integrated UI"></iframe></div>
+<script>
+const $=id=>document.getElementById(id);const add=(t,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+t;$('steps').appendChild(e);return ok};
+const frame=$('app');
+frame.addEventListener('load',()=>{$('meta').textContent='index-integrated.html loaded successfully'});
+$('run').onclick=async()=>{
+  $('steps').innerHTML='';const w=frame.contentWindow,d=frame.contentDocument;
+  if(!d){add('iframe document available',false);return}
+  if(!add('Standalone page loaded',d.readyState==='complete'||!!d.body))return;
+  if(!add('Brand is rendered',d.querySelector('.brand')?.textContent.trim()==='Сейчас'))return;
+  if(!add('Nearby presence control exists',!!d.querySelector('#presenceToggle')))return;
+  if(!add('Question input exists',!!d.querySelector('#question')))return;
+  const presets=[...d.querySelectorAll('[data-preset]')];
+  if(!add('Preset question buttons exist',presets.length===4))return;
+  presets[0].click();
+  if(!add('Preset click updates question',d.querySelector('#question').value==='Есть очередь?'))return;
+  if(!add('Demo starts without Realtime adapter',!w.NowRealtimeAdapter))return;
+  if(!add('Demo starts without Supabase dependency',!w.supabase))return;
+  $('meta').textContent='Smoke checks passed';
+};
+</script></main></body></html>
