@@ -187,9 +187,7 @@
     if (!resolved.adapter || !targets.incoming || targets.buttons.length === 0) return null;
     if (activeBridge?.enabled) return activeBridge;
     activeBridge = createOptionalBridge();
-    if (pendingRequestId && activeBridge?.enabled) {
-      activeBridge.bind(pendingRequestId);
-    }
+    if (pendingRequestId && activeBridge?.enabled) activeBridge.bind(pendingRequestId);
     return activeBridge?.enabled ? activeBridge : null;
   }
 
@@ -197,25 +195,15 @@
     const { incoming, buttons } = resolveTargets();
     if (!incoming || buttons.length === 0 || incoming.dataset.nowAnswerHook === '1') return;
     incoming.dataset.nowAnswerHook = '1';
-    const handler = event => {
-      const bridge = ensureActiveBridge();
-      if (!bridge?.enabled || !bridge.getActiveRequestId()) return;
-      const button = event.target?.closest?.('[data-incoming], [data-answer]');
-      if (!button || !incoming.contains(button)) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      button.click();
-    };
-    incoming.addEventListener('click', handler, true);
+    incoming.addEventListener('click', () => {
+      ensureActiveBridge();
+      // The bridge's own button-level capture listener will consume the click when
+      // an active request exists. This ancestor hook only closes the late-adapter
+      // race and deliberately does not re-dispatch the click.
+    }, true);
   }
 
-  const global = {
-    resolveAdapter,
-    createOptionalBridge,
-    ensureActiveBridge,
-    installCaptureHook,
-  };
-
+  const global = { resolveAdapter, createOptionalBridge, ensureActiveBridge, installCaptureHook };
   window[globalKey] = Object.freeze(global);
   window.NowMainUiAnswerBridge = Object.freeze({
     get enabled() { return !!activeBridge?.enabled; },
@@ -237,9 +225,7 @@
       pendingRequestId = null;
       return bridge?.unbind?.();
     },
-    getActiveRequestId() {
-      return activeBridge?.getActiveRequestId?.() || pendingRequestId || null;
-    },
+    getActiveRequestId() { return activeBridge?.getActiveRequestId?.() || pendingRequestId || null; },
   });
 
   const boot = () => installCaptureHook();
