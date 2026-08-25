@@ -10,7 +10,8 @@
     return new Promise((resolve, reject) => {
       const existing = [...document.scripts].find(script => script.src.endsWith(`/${src}`));
       if (existing) {
-        if (existing.dataset.nowLoaded === '1') return resolve();
+        if (existing.dataset.nowLoaded === '1' || isReady()) return resolve();
+        if (existing.readyState === 'complete') return resolve();
         existing.addEventListener('load', resolve, { once: true });
         existing.addEventListener('error', reject, { once: true });
         return;
@@ -121,8 +122,6 @@
         return;
       }
 
-      // Claim the click synchronously whenever the real create adapter is present.
-      // This prevents the legacy inline handler from running while dependencies bootstrap.
       event.preventDefault();
       event.stopImmediatePropagation();
 
@@ -204,8 +203,6 @@
     getActiveRequestId: () => null,
   });
 
-  // Install synchronously so an adapter injected immediately after script load cannot
-  // race the async dependency bootstrap and fall through to the legacy inline handler.
   installCreateButtonHook();
   bootstrap();
 })();
