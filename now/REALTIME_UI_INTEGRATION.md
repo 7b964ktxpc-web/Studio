@@ -33,6 +33,18 @@ window.NowRealtimeAdapter = {
 
 The demo page may load the bridge without changing its current offline behavior. The bridge does not create a Supabase client, credentials, or production writes.
 
+## Deterministic browser E2E
+
+`e2e-realtime-page-bridge.html` loads the contract, lifecycle, and page bridge in a real browser context and checks:
+
+1. a valid injected adapter enables the bridge;
+2. request A becomes active;
+3. starting request B replaces A;
+4. a late `A.onSnapshot` delivered after B is active is ignored;
+5. stopping clears the active request.
+
+The harness does not create a Supabase client and uses an in-memory adapter only for the test.
+
 ## Acceptance
 
 1. Demo page loads without any backend dependency.
@@ -43,4 +55,5 @@ The demo page may load the bridge without changing its current offline behavior.
 6. Starting request B stops request A first.
 7. Late callbacks from A are ignored after B becomes active.
 8. No callback from an inactive request may mutate the active request UI.
-9. No production Supabase client or credentials are created by the browser seam itself.
+9. The deterministic browser E2E passes the A → B → stale A scenario.
+10. No production Supabase client or credentials are created by the browser seam itself.
