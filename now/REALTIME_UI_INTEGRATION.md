@@ -72,6 +72,19 @@ The harness does not create a Supabase client and uses an in-memory adapter only
 
 This keeps the existing demo UI as the regression baseline while the Realtime bridge remains opt-in.
 
+## Active request hook E2E
+
+`e2e-request-realtime-hook.html` loads the actual `index-integrated.html` and injects an in-memory adapter **after page boot** to exercise the public adapter hand-off explicitly. This is a deterministic test mode, not the production boot path. It checks:
+
+1. the public `NowStartRequestRealtime` / `NowStopRequestRealtime` hooks exist;
+2. injecting a valid adapter enables the bridge;
+3. an existing request ID becomes active;
+4. `onStatus` and authoritative `onSnapshot` callbacks reach the hook handlers;
+5. an empty request ID is rejected;
+6. stopping clears the active request.
+
+The harness does not create a Supabase client and does not write production data.
+
 ## Acceptance
 
 1. Demo page loads without any backend dependency.
@@ -86,4 +99,5 @@ This keeps the existing demo UI as the regression baseline while the Realtime br
 10. The standalone UI smoke E2E passes with the bridge disabled when no adapter is injected.
 11. `NowStartRequestRealtime(requestId)` rejects an empty request ID and does not fabricate one.
 12. `NowStopRequestRealtime()` is safe when no adapter is injected.
-13. No production Supabase client or credentials are created by the browser seam itself.
+13. The active request hook E2E passes with an injected in-memory adapter without requiring Supabase.
+14. No production Supabase client or credentials are created by the browser seam itself.
