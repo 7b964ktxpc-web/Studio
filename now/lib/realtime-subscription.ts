@@ -22,14 +22,30 @@ const ANSWER_EVENTS = Object.freeze({
 });
 
 const REQUEST_STATUSES = new Set(['SEARCHING', 'ANSWERED', 'EXPIRED', 'CANCELLED']);
+const MAX_DEDUPE_KEYS = 256;
 
 function createEventDeduper() {
   const seen = new Set<string>();
+  const order: string[] = [];
 
-  return (eventId: string): boolean => {
-    if (seen.has(eventId)) return false;
-    seen.add(eventId);
-    return true;
+  return {
+    shouldProcess(eventId: string): boolean {
+      if (seen.has(eventId)) return false;
+
+      seen.add(eventId);
+      order.push(eventId);
+
+      if (order.length > MAX_DEDUPE_KEYS) {
+        const oldest = order.shift();
+        if (oldest) seen.delete(oldest);
+      }
+
+      return true;
+    },
+    clear(): void {
+      seen.clear();
+      order.length = 0;
+    },
   };
 }
 
@@ -45,7 +61,7 @@ export function subscribeToRequestRealtime(
 
   const channelName = `now:request:${requestId}`;
   const channel = transport.channel(channelName);
-  const shouldProcessEvent = createEventDeduper();
+  const deduper = createEventDeduper();
 
   channel.on(
     'postgres_changes',
@@ -58,7 +74,7 @@ export function subscribeToRequestRealtime(
       const text = typeof record.answer === 'string' ? record.answer : null;
       const createdAt = typeof record.created_at === 'string' ? record.created_at : null;
 
-      if (!answerId || !text || !createdAt || !shouldProcessEvent(`answer:${answerId}`)) return;
+      if (!answerId || !text || !createdAt || !deduper.shouldProcess(`answer:${answerId}`)) return;
 
       handleRealtimeEvent(
         {
@@ -88,7 +104,7 @@ export function subscribeToRequestRealtime(
     payload => {
       const record = (payload as { new?: Record<string, unknown> })?.new;
       if (!record || typeof record.status !== 'string' || !REQUEST_STATUSES.has(record.status)) return;
-      if (!shouldProcessEvent(`status:${record.status}`)) return;
+      if (!deduper.shouldProcess(`status:${record.status}`)) return;
 
       handleRealtimeEvent(
         {
@@ -108,6 +124,7 @@ export function subscribeToRequestRealtime(
   return {
     channelName,
     unsubscribe: async () => {
+      deduper.clear();
       await channel.unsubscribe?.();
     },
   };
