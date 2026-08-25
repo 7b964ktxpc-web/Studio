@@ -18,11 +18,11 @@ $('run').onclick=async()=>{
   if(!add('Main question input exists',!!d.querySelector('#question')))return;
   if(!add('Main ask button exists',!!d.querySelector('#askBtn')))return;
   try{await loadScript(w,'realtime-ui-adapter-contract.js');await loadScript(w,'realtime-ui-lifecycle.js');await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Realtime bridge scripts load',false);return;}
-  if(!add('Main UI bridge is disabled without adapter',w.NowMainRequestRealtimeBridge?.enabled===false))return;
+  if(!add('Main UI bridge is disabled without adapter',w.NowMainUiRealtimeBridge?.enabled===false))return;
   let creates=0,starts=0,active=null;
   w.NowRealtimeAdapter={async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},async stop(){active=null}};
   w.NowCreateRequestAdapter={async createRequest(){creates+=1;return{request_id:'00000000-0000-4000-8000-000000000061',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};}};
-  const bridge=w.NowMainRealtimePageBridge?.createOptionalBridge?.({});
+  const bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
   w.NowMainRequestRealtimeBridge=bridge;
   if(!add('Injected adapters enable main bridge',bridge?.enabled===true))return;
   await bridge.start('00000000-0000-4000-8000-000000000061');
