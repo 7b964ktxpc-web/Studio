@@ -53,7 +53,10 @@
 - regression gate for one-answer submission and terminal `REQUEST_EXPIRED` / `ALREADY_ANSWERED` handling;
 - authoritative terminal snapshot guard for answer controls;
 - opt-in main UI answer Realtime controller;
-- deterministic answer Realtime controller E2E harness.
+- deterministic answer Realtime controller E2E harness;
+- opt-in nearby-answer coordinator;
+- deterministic nearby-answer coordinator E2E harness;
+- regression gate for malformed/unrelated nearby events and A→B request switching.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -75,7 +78,7 @@
 
 1. Подключить `main-ui-realtime-bridge.js` к `index.html` одним `<script src="/now/main-ui-realtime-bridge.js"></script>`, сохранив текущий inline demo flow при отсутствии adapters.
 2. Подключить create-request adapter: геолокация → `requests`.
-3. Связать nearby Realtime event с `main-ui-answer-realtime-controller.js`, затем `main-ui-answer-bridge.js` и реальный answer adapter.
+3. Подключить реальный nearby event source к `main-ui-answer-nearby-coordinator.js`, затем `main-ui-answer-realtime-controller.js`, `main-ui-answer-bridge.js` и реальный answer adapter.
 4. Связать `notification_events` с Web Push delivery worker.
 5. Создать отдельный Supabase-проект и применить draft migrations после проверки.
 6. Провести end-to-end тест: **спросил → рядом получили push → ответили → автор получил ответ**.
