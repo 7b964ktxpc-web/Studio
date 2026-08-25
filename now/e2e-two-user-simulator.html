@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Сейчас — E2E proximity simulator</title>
+<style>
+body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:760px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #eee}.row:last-child{border-bottom:0}.ok{color:#137936;font-weight:800}.bad{color:#a43a3a;font-weight:800}.warn{color:#896300;font-weight:800}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff}.preset{background:#efede8;color:#151515;width:100%}.result{font-size:18px;font-weight:850}.small{font-size:12px;color:#777;margin-top:4px}
+</style>
+</head>
+<body><main>
+<h1>Сейчас — proximity E2E</h1>
+<div class="card"><b>Симуляция запроса</b><div class="grid" style="margin-top:10px"><button class="preset" data-distance="40">40 м</button><button class="preset" data-distance="80">80 м</button><button class="preset" data-distance="120">120 м</button><button class="preset" data-distance="149">149 м</button><button class="preset" data-distance="200">200 м</button><button class="preset" data-distance="249">249 м</button><button class="preset" data-distance="251">251 м</button><button class="preset" data-distance="700">700 м</button></div></div>
+<div class="card"><div class="row"><span>Расстояние</span><b id="distance">—</b></div><div class="row"><span>Текущая стадия</span><b id="stage">—</b></div><div class="row"><span>Push</span><span id="push">—</span></div><div class="row"><span>Причина</span><span id="reason">—</span></div></div>
+<div class="card"><div class="result" id="result">Выберите расстояние</div><div class="small">Модель: 50 → 100 → 150 → 250 м. Расширение выполняется только если предыдущая стадия не набрала достаточно получателей.</div></div>
+<script>
+const els={distance:document.getElementById('distance'),stage:document.getElementById('stage'),push:document.getElementById('push'),reason:document.getElementById('reason'),result:document.getElementById('result')};
+function classify(d){
+  if(d<=50)return {stage:'Stage 1 · 0–50 м',push:true,reason:'Получатель в базовом радиусе',result:'✅ Push разрешён'};
+  if(d<=100)return {stage:'Stage 2 · 50–100 м',push:true,reason:'Разрешён только после нехватки кандидатов на Stage 1',result:'🟡 Push условно разрешён'};
+  if(d<=150)return {stage:'Stage 3 · 100–150 м',push:true,reason:'Разрешён только после нехватки кандидатов на Stage 1–2',result:'🟠 Push условно разрешён'};
+  if(d<=250)return {stage:'Stage 4 · 150–250 м',push:true,reason:'Последняя ступень; дальше расширения нет',result:'🟠 Push условно разрешён'};
+  return {stage:'Outside · >250 м',push:false,reason:'Жёсткий предел автоматических push',result:'❌ Push запрещён'};
+}
+document.querySelectorAll('[data-distance]').forEach(btn=>btn.addEventListener('click',()=>{const d=Number(btn.dataset.distance);const x=classify(d);els.distance.textContent=d+' м';els.stage.textContent=x.stage;els.push.textContent=x.push?'YES':'NO';els.push.className=x.push?'ok':'bad';els.reason.textContent=x.reason;els.result.textContent=x.result;}));
+</script>
+</main></body></html>
