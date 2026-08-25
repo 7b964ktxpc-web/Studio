@@ -7,18 +7,19 @@
     const resolved = contract?.resolveAdapter?.(window.NowRealtimeAdapter);
 
     if (!resolved?.adapter || !lifecycleApi?.createActiveRequestUiLifecycle) {
-      return { lifecycle: null, errors: resolved?.errors || ['Realtime UI dependencies are not available'] };
+      return { adapter: null, lifecycleApi: null, errors: resolved?.errors || ['Realtime UI dependencies are not available'] };
     }
 
     return {
-      lifecycle: lifecycleApi.createActiveRequestUiLifecycle(resolved.adapter),
+      adapter: resolved.adapter,
+      lifecycleApi,
       errors: [],
     };
   }
 
   function createOptionalBridge({ onSnapshot, onError, onStatus } = {}) {
     const dependencies = resolveDependencies();
-    if (!dependencies.lifecycle) {
+    if (!dependencies.adapter || !dependencies.lifecycleApi) {
       return Object.freeze({
         enabled: false,
         errors: dependencies.errors,
@@ -32,11 +33,7 @@
       });
     }
 
-    const lifecycle = dependencies.lifecycle;
-    const guarded = window.__NOW_REALTIME_UI__?.createActiveRequestUiLifecycle;
-
-    // Re-create the lifecycle with UI handlers only after the adapter has passed validation.
-    const active = guarded(window.NowRealtimeAdapter, {
+    const active = dependencies.lifecycleApi.createActiveRequestUiLifecycle(dependencies.adapter, {
       onSnapshot,
       onError,
       onStatus,
@@ -48,7 +45,6 @@
       start: requestId => active.start(requestId),
       stop: () => active.stop(),
       getActiveRequestId: () => active.getActiveRequestId(),
-      lifecycle,
     });
   }
 
