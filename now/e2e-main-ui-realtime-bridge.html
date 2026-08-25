@@ -29,7 +29,7 @@ $('run').onclick=async()=>{
   try{await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Repeated Realtime bridge load succeeds',false);return;}
   if(!add('Repeated bridge load does not duplicate button hook',button.dataset.nowMainCreateHook==='1'))return;
 
-  let creates=0,starts=0,stops=0,active=null,received=null;
+  let creates=0,starts=0,stops=0,active=null,received=null,legacyClicks=0;
   w.NowRealtimeAdapter={
     async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},
     async stop(){stops+=1;active=null;}
@@ -38,13 +38,14 @@ $('run').onclick=async()=>{
     async createRequest(input){
       creates+=1;received=input;
       await settle(20);
-      return{request_id:'00000000-0000-4000-8000-000000000065',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
+      return{request_id:'00000000-0000-4000-8000-000000000067',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
     }
   };
+  // The bridge was loaded before the adapters. Do not manually recreate the bridge:
+  // the real button path must resolve late-injected adapters itself.
+  const legacyHandler=()=>{legacyClicks+=1};
+  button.addEventListener('click',legacyHandler);
   await settle(10);
-  const bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
-  w.NowMainUiRealtimeBridge=bridge;
-  if(!add('Injected adapters enable main bridge',bridge?.enabled===true))return;
 
   const originalGeolocation=w.navigator.geolocation;
   Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:{
@@ -64,16 +65,19 @@ $('run').onclick=async()=>{
     question.value='Есть ли сейчас очередь?';
     const labelBefore=button.textContent;
     button.click();
+    if(!add('Late adapter handoff claims click synchronously',legacyClicks===0))return;
     if(!add('Real button enters busy state',button.disabled===true&&button.getAttribute('aria-busy')==='true'))return;
-    await settle(60);
+    await settle(80);
     if(!add('createRequest called exactly once',creates===1))return;
     if(!add('Real geolocation accuracy gate accepted ±25 m',received?.latitude===54.98765&&received?.longitude===82.89890))return;
-    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000065'))return;
+    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000067'))return;
+    if(!add('Late adapter handoff enables bridge',w.NowMainUiRealtimeBridge?.enabled===true))return;
     if(!add('Question clears only after successful handoff',question.value===''))return;
     if(!add('Button restores after handoff',button.disabled===false&&button.getAttribute('aria-busy')===null&&button.textContent===labelBefore))return;
     $('bridge').textContent='enabled';$('creates').textContent=String(creates);$('starts').textContent=String(starts);$('active').textContent=active||'—';
-    $('steps').insertAdjacentHTML('beforeend','<div class="step ok">✅ Main UI real create → Realtime E2E passed</div>');
+    $('steps').insertAdjacentHTML('beforeend','<div class="step ok">✅ Main UI late-adapter create → Realtime E2E passed</div>');
   } finally {
+    button.removeEventListener('click',legacyHandler);
     Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:originalGeolocation});
   }
 };
