@@ -1,0 +1,50 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now Supabase answer request adapter E2E</title>
+<pre id="out">running…</pre>
+<script src="./supabase-answer-request-adapter.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+
+  if (window.NowSupabaseAnswerRequestAdapter.createOptionalAdapter().enabled) {
+    throw new Error('adapter must be disabled without an injected Supabase client');
+  }
+
+  const calls = [];
+  window.supabase = {
+    async rpc(name, params) {
+      calls.push({ name, params });
+      return {
+        data: [{ answer_id: 'ans-e2e-1', request_id: params.p_request_id, request_status: 'SEARCHING' }],
+        error: null,
+      };
+    },
+  };
+
+  const adapter = window.NowSupabaseAnswerRequestAdapter.createOptionalAdapter();
+  if (!adapter.enabled) throw new Error('adapter did not enable with injected Supabase client');
+
+  const result = await adapter.submitAnswer({ request_id: 'req-e2e-1', answer: 'Очередь небольшая' });
+  if (calls.length !== 1) throw new Error(`expected one RPC call, got ${calls.length}`);
+  if (calls[0].name !== 'answer_request') throw new Error(`unexpected RPC ${calls[0].name}`);
+  if (calls[0].params.p_request_id !== 'req-e2e-1') throw new Error('request_id mismatch');
+  if (calls[0].params.p_answer !== 'Очередь небольшая') throw new Error('answer mismatch');
+  if ('radius_m' in calls[0].params) throw new Error('radius leaked into answer RPC');
+  if (result?.request_id !== 'req-e2e-1') throw new Error('authoritative request_id was not preserved');
+
+  window.supabase.rpc = async () => ({ data: [{ answer_id: 'ans-e2e-2', request_id: 'other-request', request_status: 'SEARCHING' }], error: null });
+  let rejected = false;
+  try {
+    await adapter.submitAnswer({ request_id: 'req-e2e-1', answer: 'Не знаю' });
+  } catch (error) {
+    rejected = String(error?.code || '').toUpperCase() === 'INVALID_REQUEST';
+  }
+  if (!rejected) throw new Error('mismatched request_id was accepted');
+
+  out.textContent = 'PASS: Supabase answer_request adapter calls the exact authoritative RPC contract.';
+})().catch(error => {
+  out.textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
