@@ -115,6 +115,17 @@
       const createAdapter = window.NowCreateRequestAdapter;
       if (!createAdapter || typeof createAdapter.createRequest !== 'function') return;
 
+      if (button.dataset.nowMainCreateBusy === '1') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+
+      // Claim the click synchronously whenever the real create adapter is present.
+      // This prevents the legacy inline handler from running while dependencies bootstrap.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
       if (!bridge?.enabled) {
         try {
           await ensureDependencies();
@@ -131,13 +142,6 @@
       const text = String(question?.value || '').trim();
       if (!text) return;
 
-      if (button.dataset.nowMainCreateBusy === '1') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
-      event.preventDefault();
-      event.stopImmediatePropagation();
       button.dataset.nowMainCreateBusy = '1';
       button.disabled = true;
       button.setAttribute('aria-busy', 'true');
