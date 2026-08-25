@@ -25,16 +25,20 @@ $('run').onclick=async()=>{
   if(!add('Lifecycle self-loaded',!!w.__NOW_REALTIME_UI__?.createActiveRequestUiLifecycle))return;
   if(!add('Main UI bridge is disabled without adapter',w.NowMainUiRealtimeBridge?.enabled===false))return;
 
+  // Loading the bridge a second time must not double-bind the real button.
+  try{await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Repeated Realtime bridge load succeeds',false);return;}
+  if(!add('Repeated bridge load does not duplicate button hook',button.dataset.nowMainCreateHook==='1'))return;
+
   let creates=0,starts=0,stops=0,active=null,received=null;
   w.NowRealtimeAdapter={
     async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},
-    async stop(){stops+=1;stops+=0;active=null;}
+    async stop(){stops+=1;active=null;}
   };
   w.NowCreateRequestAdapter={
     async createRequest(input){
       creates+=1;received=input;
       await settle(20);
-      return{request_id:'00000000-0000-4000-8000-000000000064',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
+      return{request_id:'00000000-0000-4000-8000-000000000065',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
     }
   };
   await settle(10);
@@ -44,9 +48,19 @@ $('run').onclick=async()=>{
 
   const originalGeolocation=w.navigator.geolocation;
   Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:{
-    getCurrentPosition(success){success({coords:{accuracy:25,latitude:54.98765,longitude:82.89890}})}
+    getCurrentPosition(success){success({coords:{accuracy:80,latitude:54.98765,longitude:82.89890}})}
   }});
   try{
+    question.value='Проверка точности';
+    button.click();
+    await settle(30);
+    if(!add('Accuracy >50 m blocks createRequest',creates===0))return;
+    if(!add('Accuracy rejection keeps button usable',button.disabled===false&&button.getAttribute('aria-busy')===null))return;
+    if(!add('Accuracy rejection does not start Realtime',starts===0))return;
+
+    Object.defineProperty(w.navigator,'geolocation',{configurable:true,value:{
+      getCurrentPosition(success){success({coords:{accuracy:25,latitude:54.98765,longitude:82.89890}})}
+    }});
     question.value='Есть ли сейчас очередь?';
     const labelBefore=button.textContent;
     button.click();
@@ -54,7 +68,7 @@ $('run').onclick=async()=>{
     await settle(60);
     if(!add('createRequest called exactly once',creates===1))return;
     if(!add('Real geolocation accuracy gate accepted ±25 m',received?.latitude===54.98765&&received?.longitude===82.89890))return;
-    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000064'))return;
+    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000065'))return;
     if(!add('Question clears only after successful handoff',question.value===''))return;
     if(!add('Button restores after handoff',button.disabled===false&&button.getAttribute('aria-busy')===null&&button.textContent===labelBefore))return;
     $('bridge').textContent='enabled';$('creates').textContent=String(creates);$('starts').textContent=String(starts);$('active').textContent=active||'—';
