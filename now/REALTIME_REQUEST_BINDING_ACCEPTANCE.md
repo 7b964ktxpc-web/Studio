@@ -31,6 +31,18 @@
 5. Repeated `SUBSCRIBED` transitions are treated as connection recovery events; event dedupe state remains scoped to the live subscription.
 6. `UNSUBSCRIBED`/cleanup does not perform a refresh after the channel is intentionally closed.
 
+## Deterministic simulator scenario
+
+The two-user simulator explicitly covers the missed-event path:
+
+1. requester creates `SEARCHING` request;
+2. eligible responder submits an answer;
+3. server state becomes `ANSWERED` while the requester is disconnected;
+4. `answer.created` is intentionally not delivered;
+5. the channel returns to `SUBSCRIBED`;
+6. authoritative refresh recovers `ANSWERED` from server state;
+7. duplicate answer delivery does not create an additional refresh-side effect.
+
 ## Test boundary
 
 The HTML simulator is deterministic and offline. It models two users and the server state transition without creating a Supabase project, applying migrations, or touching production data.
