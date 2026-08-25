@@ -203,5 +203,9 @@
     stop: async () => {},
     getActiveRequestId: () => null,
   });
+
+  // Install synchronously so an adapter injected immediately after script load cannot
+  // race the async dependency bootstrap and fall through to the legacy inline handler.
+  installCreateButtonHook();
   bootstrap();
 })();
