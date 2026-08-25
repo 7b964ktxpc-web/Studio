@@ -57,8 +57,17 @@
     }
 
     const defaults = createDefaultUiHandlers();
-    const active = dependencies.lifecycleApi.createActiveRequestUiLifecycle(dependencies.adapter, {
-      onSnapshot: onSnapshot ?? defaults.onSnapshot,
+    let active;
+    const snapshotHandler = snapshot => {
+      (onSnapshot ?? defaults.onSnapshot)?.(snapshot);
+      const status = String(snapshot?.request_status ?? snapshot?.status ?? '').toUpperCase();
+      if (['ANSWERED', 'EXPIRED', 'CANCELLED'].includes(status)) {
+        Promise.resolve().then(() => active.stop()).catch(() => {});
+      }
+    };
+
+    active = dependencies.lifecycleApi.createActiveRequestUiLifecycle(dependencies.adapter, {
+      onSnapshot: snapshotHandler,
       onError: onError ?? defaults.onError,
       onStatus: onStatus ?? defaults.onStatus,
     });
