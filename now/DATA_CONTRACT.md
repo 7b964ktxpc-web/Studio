@@ -1,6 +1,6 @@
-# «Сейчас» — data contract v1.3
+# «Сейчас» — data contract v1.4
 
-This contract defines the smallest backend model for the MVP. It intentionally contains no secrets and no production credentials.
+This contract defines the smallest backend model for the MVP. It intentionally contains no secrets or production credentials.
 
 ## 1. requests
 
@@ -31,9 +31,13 @@ An opt-in signal that a person is currently available to answer nearby questions
 - `available`: boolean
 - `last_seen_at`: timestamptz
 
-Presence policy:
-- considered fresh for 5 minutes only;
-- `available=false` never receives nearby-request push;
+Presence lifecycle:
+- receiving nearby questions is **off by default**;
+- user explicitly enables **«Я рядом»**;
+- heartbeat target is 60 seconds;
+- presence is fresh for 5 minutes only;
+- disabling «Я рядом» immediately sets `available=false`;
+- stale presence must not receive a nearby-request push;
 - accuracy worse than 50 m is not eligible for automated matching;
 - exact coordinates are never exposed to other users.
 
@@ -73,6 +77,7 @@ An internal event used by push/Telegram adapters.
 8. Do not send the same request repeatedly to the same person during the request/cooldown window.
 9. Do not notify the requester about their own request.
 10. A request is fresh for the UI for 10 minutes; after that it becomes `EXPIRED`.
+11. Map visibility can be wider than push matching; seeing an event on the map never implies a push.
 
 ## Realtime events
 
@@ -80,7 +85,8 @@ The first production Realtime channel should publish only safe public state:
 
 - new requests relevant to an opted-in viewer;
 - new answers for the viewer's own request;
-- request status changes.
+- request status changes;
+- presence status changes only for the current user's own session.
 
 Exact coordinates and private profile data must not be broadcast.
 
