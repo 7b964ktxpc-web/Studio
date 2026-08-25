@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Сейчас — Я рядом</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:520px;margin:auto;padding:22px 16px}.card{background:#fff;border:1px solid #e7e4de;border-radius:22px;padding:18px;box-shadow:0 14px 36px rgba(21,21,21,.07)}h1{font-size:28px;line-height:1;margin:0 0 10px}.muted{color:#777;line-height:1.45}.status{margin:18px 0;padding:15px;border-radius:16px;background:#f5faf6}.state{font-weight:850;font-size:20px}.line{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #eee}.line:last-child{border-bottom:0}.toggle{width:100%;border:0;border-radius:15px;padding:14px 16px;background:#2cad5a;color:#fff;font:inherit;font-weight:850}.note{margin-top:12px;font-size:12px;color:#777}.warn{background:#fff6dd}.pause{background:#f1f1f1}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="card" id="presencePanel">
+      <h1>Я рядом</h1>
+      <div class="muted">Разреши приложению учитывать твоё присутствие рядом с местом запроса.</div>
+      <div class="status" id="statusBox">
+        <div class="state" data-presence-state>Не беспокоить</div>
+        <div class="line"><span>Точность</span><b data-presence-accuracy>Точность неизвестна</b></div>
+        <div class="line"><span>Радиус</span><b data-presence-radius>Основной радиус 50 м · максимум 250 м</b></div>
+      </div>
+      <button class="toggle" data-presence-toggle>Включить «Я рядом»</button>
+      <div class="note">Push не отправляется дальше 250 м. При точности хуже 50 м участие временно приостанавливается.</div>
+    </div>
+  </main>
+  <script src="/now/presence-widget.js"></script>
+</body>
+</html>
