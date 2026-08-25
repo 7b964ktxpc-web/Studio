@@ -27,13 +27,17 @@ window.NowRealtimeAdapter = {
 };
 ```
 
-The page creates the lifecycle wrapper only when this adapter exists. Without the adapter, the current offline/demo behavior remains unchanged.
+`realtime-ui-adapter-contract.js` provides runtime validation for the injected object. A valid adapter must expose callable `start()` and `stop()` methods. Invalid candidates resolve to `null` with explicit validation errors instead of being invoked.
+
+The page creates the lifecycle wrapper only when a valid adapter exists. Without the adapter, the current offline/demo behavior remains unchanged. `createNoopAdapter()` is available for deterministic tests, but the demo page does not silently treat the no-op adapter as a real backend.
 
 ## Acceptance
 
 1. Demo page loads without any backend dependency.
 2. Missing `window.NowRealtimeAdapter` does not throw.
-3. A real adapter may be injected before a request is started.
-4. Starting request B stops request A first.
-5. Late callbacks from A are ignored after B becomes active.
-6. No callback from an inactive request may mutate the active request UI.
+3. A candidate without `start()` or `stop()` is rejected before invocation.
+4. A valid real adapter may be injected before a request is started.
+5. Starting request B stops request A first.
+6. Late callbacks from A are ignored after B becomes active.
+7. No callback from an inactive request may mutate the active request UI.
+8. No production Supabase client or credentials are created by the browser seam itself.
