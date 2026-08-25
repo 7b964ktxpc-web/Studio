@@ -20,22 +20,25 @@ $('run').onclick=async()=>{
   if(!add('Main question input exists',!!question))return;
   if(!add('Main ask button exists',!!button))return;
   if(!add('Main geo status exists',!!geo))return;
-  try{await loadScript(w,'realtime-ui-adapter-contract.js');await loadScript(w,'realtime-ui-lifecycle.js');await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Realtime bridge scripts load',false);return;}
+  try{await loadScript(w,'main-ui-realtime-bridge.js');}catch{add('Self-loading Realtime bridge script loads',false);return;}
+  if(!add('Adapter contract self-loaded',!!w.NowRealtimeAdapterContract?.resolveAdapter))return;
+  if(!add('Lifecycle self-loaded',!!w.__NOW_REALTIME_UI__?.createActiveRequestUiLifecycle))return;
   if(!add('Main UI bridge is disabled without adapter',w.NowMainUiRealtimeBridge?.enabled===false))return;
 
   let creates=0,starts=0,stops=0,active=null,received=null;
   w.NowRealtimeAdapter={
     async start(id,handlers){starts+=1;active=id;handlers.onStatus?.('SUBSCRIBED');},
-    async stop(){stops+=1;active=null;}
+    async stop(){stops+=1;stops+=0;active=null;}
   };
   w.NowCreateRequestAdapter={
     async createRequest(input){
       creates+=1;received=input;
       await settle(20);
-      return{request_id:'00000000-0000-4000-8000-000000000063',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
+      return{request_id:'00000000-0000-4000-8000-000000000064',request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};
     }
   };
-  let bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
+  await settle(10);
+  const bridge=w.NowMainUiRealtimeBridge?.createOptionalBridge?.({});
   w.NowMainUiRealtimeBridge=bridge;
   if(!add('Injected adapters enable main bridge',bridge?.enabled===true))return;
 
@@ -51,7 +54,7 @@ $('run').onclick=async()=>{
     await settle(60);
     if(!add('createRequest called exactly once',creates===1))return;
     if(!add('Real geolocation accuracy gate accepted ±25 m',received?.latitude===54.98765&&received?.longitude===82.89890))return;
-    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000063'))return;
+    if(!add('Authoritative request ID reaches Realtime',starts===1&&active==='00000000-0000-4000-8000-000000000064'))return;
     if(!add('Question clears only after successful handoff',question.value===''))return;
     if(!add('Button restores after handoff',button.disabled===false&&button.getAttribute('aria-busy')===null&&button.textContent===labelBefore))return;
     $('bridge').textContent='enabled';$('creates').textContent=String(creates);$('starts').textContent=String(starts);$('active').textContent=active||'—';
