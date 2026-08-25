@@ -203,6 +203,10 @@
     getActiveRequestId: () => null,
   });
 
-  installCreateButtonHook();
+  const installWhenReady = () => installCreateButtonHook();
+  installWhenReady();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', installWhenReady, { once: true });
+  }
   bootstrap();
 })();
