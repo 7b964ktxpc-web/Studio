@@ -11,31 +11,49 @@ main{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border:1px s
 </head>
 <body><main>
 <h1>Сейчас — two-user E2E</h1>
-<div class="card"><b>1. Requester</b><div class="row"><span>Request</span><b id="requestId">—</b></div><div class="row"><span>Initial state</span><b id="initial">—</b></div></div>
+<div class="card"><b>1. Requester</b><div class="row"><span>Request</span><b id="requestId">—</b></div><div class="row"><span>Initial state</span><b id="initial">—</b></div><div class="row"><span>Realtime connection</span><b id="connection">—</b></div></div>
 <div class="card"><b>2. Responder proximity</b><div class="grid" style="margin-top:10px"><button class="preset" data-distance="40">40 м</button><button class="preset" data-distance="80">80 м</button><button class="preset" data-distance="149">149 м</button><button class="preset" data-distance="249">249 м</button><button class="preset" data-distance="251">251 м</button><button class="preset" data-distance="700">700 м</button></div><div class="row"><span>Distance</span><b id="distance">—</b></div><div class="row"><span>Automatic push</span><span id="push">—</span></div></div>
-<div class="card"><b>3. Run answer flow</b><button id="run" class="run">Запустить двухпользовательский E2E</button><div class="steps" id="steps"></div></div>
-<div class="card"><div class="row"><span>Authoritative snapshot</span><b id="snapshot">—</b></div><div class="row"><span>Realtime refresh calls</span><b id="refreshes">0</b></div><div class="row"><span>Duplicate event refreshes</span><b id="duplicates">0</b></div><div class="result" id="result">Выберите расстояние и запустите сценарий</div></div>
+<div class="card"><b>3. Run answer + reconnect flow</b><button id="run" class="run">Запустить двухпользовательский E2E</button><div class="steps" id="steps"></div></div>
+<div class="card"><div class="row"><span>Authoritative snapshot</span><b id="snapshot">—</b></div><div class="row"><span>Realtime refresh calls</span><b id="refreshes">0</b></div><div class="row"><span>Missed Realtime events</span><b id="missed">0</b></div><div class="row"><span>Duplicate event refreshes</span><b id="duplicates">0</b></div><div class="result" id="result">Выберите расстояние и запустите сценарий</div></div>
 <script>
 const state={distance:null};
-const els={distance:document.getElementById('distance'),push:document.getElementById('push'),steps:document.getElementById('steps'),snapshot:document.getElementById('snapshot'),refreshes:document.getElementById('refreshes'),duplicates:document.getElementById('duplicates'),result:document.getElementById('result'),requestId:document.getElementById('requestId'),initial:document.getElementById('initial')};
+const els={distance:document.getElementById('distance'),push:document.getElementById('push'),steps:document.getElementById('steps'),snapshot:document.getElementById('snapshot'),refreshes:document.getElementById('refreshes'),missed:document.getElementById('missed'),duplicates:document.getElementById('duplicates'),result:document.getElementById('result'),requestId:document.getElementById('requestId'),initial:document.getElementById('initial'),connection:document.getElementById('connection')};
 const classify=d=>d<=50?{push:true,stage:'0–50 м'}:d<=100?{push:true,stage:'50–100 м'}:d<=150?{push:true,stage:'100–150 м'}:d<=250?{push:true,stage:'150–250 м'}:{push:false,stage:'>250 м'};
 function step(text,ok=true){const el=document.createElement('div');el.className='step '+(ok?'ok':'bad');el.textContent=(ok?'✓ ':'✕ ')+text;els.steps.appendChild(el);return ok;}
 function chooseDistance(d){state.distance=d;const x=classify(d);els.distance.textContent=d+' м';els.push.textContent=x.push?'YES · '+x.stage:'NO · '+x.stage;els.push.className=x.push?'ok':'bad';els.result.textContent=x.push?'Готов к E2E: responder eligible.':'E2E остановлен: автоматический push запрещён дальше 250 м.';}
 document.querySelectorAll('[data-distance]').forEach(btn=>btn.addEventListener('click',()=>chooseDistance(Number(btn.dataset.distance))));
 document.getElementById('run').addEventListener('click',()=>{
-  els.steps.innerHTML='';els.snapshot.textContent='—';els.refreshes.textContent='0';els.duplicates.textContent='0';
+  els.steps.innerHTML='';els.snapshot.textContent='—';els.refreshes.textContent='0';els.missed.textContent='0';els.duplicates.textContent='0';els.connection.textContent='SUBSCRIBED';
   if(state.distance===null){els.result.textContent='Сначала выберите расстояние';return;}
-  const x=classify(state.distance);const requestId='request-demo-001';els.requestId.textContent=requestId;els.initial.textContent='SEARCHING';
+  const x=classify(state.distance);const requestId='request-demo-001';const serverSnapshot={id:requestId,status:'SEARCHING'};
+  els.requestId.textContent=requestId;els.initial.textContent=serverSnapshot.status;
   if(!step('Requester created request → SEARCHING'))return;
   if(!step('Responder proximity checked → '+state.distance+' м · '+x.stage,x.push))return;
   if(!step('Responder submitted one answer'))return;
-  const serverSnapshot={id:requestId,status:'ANSWERED'};
+  serverSnapshot.status='ANSWERED';
   if(!step('Server state changed → ANSWERED'))return;
-  if(!step('Realtime answer.created delivered'))return;
-  let seen=false;const refresh=()=>{if(seen){els.duplicates.textContent=String(Number(els.duplicates.textContent)+1);return;}seen=true;els.refreshes.textContent=String(Number(els.refreshes.textContent)+1);els.snapshot.textContent=serverSnapshot.status;};
-  refresh();if(!step('Requester refreshed authoritative snapshot → ANSWERED'))return;
-  refresh();if(!step('Duplicate Realtime event ignored by subscription dedupe'))return;
-  els.result.textContent='✅ Two-user E2E passed: request → eligible responder → answer → Realtime → authoritative snapshot.';
+
+  // The Realtime channel drops while the answer is being committed. No answer event is delivered.
+  els.connection.textContent='DISCONNECTED';els.missed.textContent='1';
+  if(!step('Requester disconnected before answer.created was delivered'))return;
+  if(!step('answer.created missed while disconnected'))return;
+
+  const refresh=()=>{
+    els.refreshes.textContent=String(Number(els.refreshes.textContent)+1);
+    els.snapshot.textContent=serverSnapshot.status;
+  };
+
+  els.connection.textContent='SUBSCRIBED';
+  refresh();
+  if(!step('Reconnect → SUBSCRIBED → authoritative refresh'))return;
+  if(!step('Authoritative snapshot recovered → ANSWERED'))return;
+
+  let duplicateSeen=false;
+  const onRealtime=()=>{if(duplicateSeen){els.duplicates.textContent=String(Number(els.duplicates.textContent)+1);return;}duplicateSeen=true;};
+  onRealtime();onRealtime();
+  if(!step('Duplicate answer event ignored after reconnect'))return;
+
+  els.result.textContent='✅ Reconnect E2E passed: request → answer while offline → reconnect → authoritative ANSWERED.';
 });
 </script>
 </main></body></html>
