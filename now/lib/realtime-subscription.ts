@@ -21,6 +21,18 @@ const ANSWER_EVENTS = Object.freeze({
   table: 'answers',
 });
 
+const REQUEST_STATUSES = new Set(['SEARCHING', 'ANSWERED', 'EXPIRED', 'CANCELLED']);
+
+function createEventDeduper() {
+  const seen = new Set<string>();
+
+  return (eventId: string): boolean => {
+    if (seen.has(eventId)) return false;
+    seen.add(eventId);
+    return true;
+  };
+}
+
 export function subscribeToRequestRealtime(
   transport: RealtimeTransport,
   requestId: string,
@@ -33,6 +45,7 @@ export function subscribeToRequestRealtime(
 
   const channelName = `now:request:${requestId}`;
   const channel = transport.channel(channelName);
+  const shouldProcessEvent = createEventDeduper();
 
   channel.on(
     'postgres_changes',
@@ -45,7 +58,7 @@ export function subscribeToRequestRealtime(
       const text = typeof record.answer === 'string' ? record.answer : null;
       const createdAt = typeof record.created_at === 'string' ? record.created_at : null;
 
-      if (!answerId || !text || !createdAt) return;
+      if (!answerId || !text || !createdAt || !shouldProcessEvent(`answer:${answerId}`)) return;
 
       handleRealtimeEvent(
         {
@@ -74,7 +87,8 @@ export function subscribeToRequestRealtime(
     },
     payload => {
       const record = (payload as { new?: Record<string, unknown> })?.new;
-      if (!record || typeof record.status !== 'string') return;
+      if (!record || typeof record.status !== 'string' || !REQUEST_STATUSES.has(record.status)) return;
+      if (!shouldProcessEvent(`status:${record.status}`)) return;
 
       handleRealtimeEvent(
         {
@@ -82,7 +96,7 @@ export function subscribeToRequestRealtime(
           id: `${requestId}:${record.status}`,
           requestId,
           createdAt: new Date().toISOString(),
-          status: record.status,
+          status: record.status as 'SEARCHING' | 'ANSWERED' | 'EXPIRED' | 'CANCELLED',
         },
         refreshRequest,
       );
