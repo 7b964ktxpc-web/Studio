@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Now — duplicate click E2E</title>
+<style>body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:760px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}</style>
+</head>
+<body><main>
+<h1>Сейчас — duplicate click E2E</h1>
+<div class="card"><button id="run">Запустить E2E</button><div id="steps"></div></div>
+<div class="card"><div>Create calls: <b id="calls">0</b></div><div>Button disabled during request: <b id="disabled">false</b></div><div>Button disabled after completion: <b id="after">false</b></div><div><b id="result">Ready</b></div></div>
+<script>
+const $=id=>document.getElementById(id);
+const add=(text,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+text;$('steps').appendChild(e);return ok};
+const frame=document.createElement('iframe');frame.src='index-integrated.html';frame.hidden=true;document.body.appendChild(frame);
+$('run').onclick=async()=>{
+  $('steps').innerHTML='';$('result').textContent='Running';$('calls').textContent='0';$('disabled').textContent='false';$('after').textContent='false';
+  await new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('timeout')),2500)}).catch(()=>{});
+  const w=frame.contentWindow;
+  w.NowCreateRequestAdapter={
+    async createRequest(){
+      window.__createCalls=(window.__createCalls||0)+1;
+      await new Promise(r=>setTimeout(r,120));
+      return {request_id:'req-duplicate-e2e-001',request_status:'SEARCHING'};
+    }
+  };
+  w.NowRealtimeAdapter={async start(){},async stop(){}};
+  const bridge=w.NowRealtimePageBridge.createOptionalBridge({});
+  w.NowRequestRealtimeBridge=bridge;
+  const ask=w.document.querySelector('#ask');
+  w.document.querySelector('#question').value='Есть очередь?';
+  if(!add('Ask button exists',!!ask))return;
+
+  let resolveGeo;
+  const oldGeo=w.navigator.geolocation;
+  w.navigator.geolocation={getCurrentPosition(success){resolveGeo=success;}};
+  const first=new w.MouseEvent('click',{bubbles:true,cancelable:true});
+  const second=new w.MouseEvent('click',{bubbles:true,cancelable:true});
+  ask.dispatchEvent(first);
+  const disabledDuring=ask.disabled;
+  ask.dispatchEvent(second);
+  resolveGeo({coords:{accuracy:25,latitude:55.03,longitude:82.92}});
+  await new Promise(r=>setTimeout(r,180));
+  $('calls').textContent=String(window.__createCalls||0);
+  $('disabled').textContent=String(disabledDuring);
+  $('after').textContent=String(ask.disabled);
+  if(!add('Create request called exactly once',window.__createCalls===1))return;
+  if(!add('Button disabled while request is in flight',disabledDuring===true))return;
+  if(!add('Button re-enabled after completion',ask.disabled===false))return;
+  w.navigator.geolocation=oldGeo;
+  $('result').textContent='✅ Duplicate click E2E passed';
+};
+</script></main></body></html>
