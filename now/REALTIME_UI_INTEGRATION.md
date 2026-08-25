@@ -45,6 +45,19 @@ The demo page may load the bridge without changing its current offline behavior.
 
 The harness does not create a Supabase client and uses an in-memory adapter only for the test.
 
+## Standalone UI smoke E2E
+
+`e2e-index-integrated-smoke.html` loads the actual `index-integrated.html` in an iframe and checks the current browser surface without invoking geolocation or backend writes:
+
+1. the standalone page loads;
+2. brand and presence controls exist;
+3. the question input and all four preset buttons exist;
+4. the preset interaction still updates the question input;
+5. the page starts without an injected Realtime adapter;
+6. the page starts without a Supabase client dependency.
+
+This keeps the existing demo UI as the regression baseline while the Realtime bridge remains opt-in.
+
 ## Acceptance
 
 1. Demo page loads without any backend dependency.
@@ -56,4 +69,5 @@ The harness does not create a Supabase client and uses an in-memory adapter only
 7. Late callbacks from A are ignored after B becomes active.
 8. No callback from an inactive request may mutate the active request UI.
 9. The deterministic browser E2E passes the A → B → stale A scenario.
-10. No production Supabase client or credentials are created by the browser seam itself.
+10. The standalone UI smoke E2E passes without backend dependency.
+11. No production Supabase client or credentials are created by the browser seam itself.
