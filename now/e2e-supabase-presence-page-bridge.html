@@ -9,6 +9,7 @@
   <div id="lastSeen"></div>
   <div id="geo"></div>
   <script src="supabase-presence-adapter.js"></script>
+  <script src="supabase-presence-page-bridge.js"></script>
   <script>
   (() => {
     const calls = [];
@@ -20,8 +21,6 @@
         throw new Error(`unexpected rpc: ${name}`);
       },
     };
-    window.NowSupabasePresenceAdapter.installForTest = undefined;
-    const oldGeo = navigator.geolocation;
     const positions = {
       watchPosition(success) {
         success({ coords: { latitude: 55.0302, longitude: 82.9204, accuracy: 24 } });
@@ -34,7 +33,7 @@
     const installed = window.NowSupabasePresencePageBridge.install(client);
     if (!installed) throw new Error('presence bridge did not install');
     document.querySelector('#presenceToggle').click();
-    setTimeout(async () => {
+    setTimeout(() => {
       if (calls.length !== 1 || calls[0].name !== 'upsert_my_presence') throw new Error('presence upsert mismatch');
       if (calls[0].args.p_accuracy_m !== 24 || calls[0].args.p_available !== true) throw new Error('presence payload mismatch');
       document.querySelector('#presenceToggle').click();
