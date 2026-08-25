@@ -52,7 +52,23 @@
       window.NowSupabasePresencePageBridge?.install?.(client);
 
       if (window.NowRealtimePageBridge?.createOptionalBridge) {
-        window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({});
+        window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({
+          onSnapshot: snapshot => {
+            if (!status) return;
+            const statusKind = String(snapshot?.request_status || '').toUpperCase();
+            if (snapshot?.event_kind === 'REQUEST_ANSWERED') {
+              const latest = snapshot?.latest_answer?.answer;
+              const count = Array.isArray(snapshot?.answers) ? snapshot.answers.length : 0;
+              status.textContent = latest
+                ? `Получен ответ: ${latest}${count > 1 ? ` · ответов ${count}` : ''}`
+                : 'Получен новый ответ рядом';
+              return;
+            }
+            if (statusKind === 'ANSWERED') status.textContent = 'Ответы собраны';
+            else if (statusKind === 'EXPIRED') status.textContent = 'Время ожидания истекло';
+            else if (statusKind === 'CANCELLED') status.textContent = 'Запрос отменён';
+          },
+        });
         window.NowRealtimePageBridge.installCreateRequestButtonHook?.();
       }
 
