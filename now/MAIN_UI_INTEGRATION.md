@@ -2,6 +2,22 @@
 
 Цель: подключить готовые presence/realtime/notification модули к основному экрану без переписывания существующего HTML целиком.
 
+## Realtime bridge
+
+`main-ui-realtime-bridge.js` — новый opt-in seam для существующего `now/index.html`.
+
+- использует реальные main UI selectors: `#askBtn`, `#question`, `#geo`;
+- без injected adapters полностью выключен и не меняет demo flow;
+- при injected adapters требует точность геолокации `≤50 м`;
+- использует только authoritative `request_id`, возвращённый create-request adapter;
+- подключает существующий generation-safe Realtime lifecycle;
+- не создаёт Supabase client и не выполняет backend writes самостоятельно;
+- блокирует duplicate create clicks во время handoff.
+
+Acceptance: `MAIN_UI_REALTIME_BRIDGE_ACCEPTANCE.md`.
+
+E2E: `e2e-main-ui-realtime-bridge.html`.
+
 ## Presence block
 
 Добавить в экран «Спросить» компактную карточку:
