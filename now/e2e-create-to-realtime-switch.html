@@ -1,0 +1,22 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Now — create to realtime switch E2E</title><style>body{margin:0;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:820px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:16px;margin:12px 0}.step{padding:9px 11px;border-radius:10px;margin:6px 0;background:#f3f3ef}.ok{background:#e8f7ed;color:#137936}.bad{background:#ffe8e8;color:#a43a3a}button{border:0;border-radius:12px;padding:11px 14px;font:inherit;font-weight:800;background:#151515;color:#fff;width:100%}</style></head><body><main><h1>Сейчас — create → Realtime switch E2E</h1><div class="card"><button id="run">Запустить E2E</button><div id="steps"></div></div><div class="card"><div>Creates: <b id="creates">0</b></div><div>Starts: <b id="starts">0</b></div><div>Stops: <b id="stops">0</b></div><div>Active request: <b id="active">—</b></div><div><b id="result">Ready</b></div></div><script>
+const $=id=>document.getElementById(id);const add=(t,ok=true)=>{const e=document.createElement('div');e.className='step '+(ok?'ok':'bad');e.textContent=(ok?'✓ ':'✕ ')+t;$('steps').appendChild(e);return ok};
+const frame=document.createElement('iframe');frame.src='index-integrated.html';frame.hidden=true;document.body.appendChild(frame);
+$('run').onclick=async()=>{
+ $('steps').innerHTML='';$('result').textContent='Running';$('creates').textContent='0';$('starts').textContent='0';$('stops').textContent='0';$('active').textContent='—';
+ await new Promise((resolve,reject)=>{frame.addEventListener('load',resolve,{once:true});setTimeout(()=>reject(new Error('timeout')),2000)}).catch(()=>{});
+ const w=frame.contentWindow;if(!add('Create→Realtime hook exists',typeof w.NowCreateAndStartRequest==='function'))return;
+ let creates=0,starts=0,stops=0;const ids=['req-switch-a','req-switch-b'];let index=0;let started=[];
+ w.NowCreateRequestAdapter={async createRequest(){const id=ids[index++];creates+=1;return{request_id:id,request_status:'SEARCHING',expires_at:new Date(Date.now()+60000).toISOString(),queued_count:1};}};
+ w.NowRealtimeAdapter={async start(id){starts+=1;started.push(id)},async stop(){stops+=1}};
+ const bridge=w.NowRealtimePageBridge.createOptionalBridge({});w.NowRequestRealtimeBridge=bridge;
+ await w.NowCreateAndStartRequest({text:'Первый вопрос',latitude:55.03,longitude:82.92});
+ if(!add('First create starts request A',creates===1&&starts===1&&started[0]==='req-switch-a'))return;
+ if(!add('Request A is active',bridge.getActiveRequestId()==='req-switch-a'))return;
+ await w.NowCreateAndStartRequest({text:'Второй вопрос',latitude:55.03,longitude:82.92});
+ $('creates').textContent=String(creates);$('starts').textContent=String(starts);$('stops').textContent=String(stops);$('active').textContent=bridge.getActiveRequestId()||'—';
+ if(!add('Second create starts request B',creates===2&&starts===2&&started[1]==='req-switch-b'))return;
+ if(!add('Old request A is stopped before B becomes active',stops===2))return;
+ if(!add('Request B is the only active request',bridge.getActiveRequestId()==='req-switch-b'))return;
+ $('result').textContent='✅ Create→Realtime switch E2E passed';
+};
+</script></main></body></html>
