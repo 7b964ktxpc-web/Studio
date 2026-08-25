@@ -15,32 +15,47 @@ export type RealtimeSubscription = {
   unsubscribe: () => Promise<void>;
 };
 
+const ANSWER_EVENTS = Object.freeze({
+  event: 'INSERT',
+  schema: 'public',
+  table: 'answers',
+});
+
 export function subscribeToRequestRealtime(
   transport: RealtimeTransport,
   requestId: string,
   refreshRequest: RequestRefresher,
   onStatus?: (status: string) => void,
 ): RealtimeSubscription {
-  if (!requestId || requestId.length < 20) throw new Error('Invalid request id');
+  if (!requestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+    throw new Error('Invalid request id');
+  }
 
   const channelName = `now:request:${requestId}`;
   const channel = transport.channel(channelName);
 
   channel.on(
     'postgres_changes',
-    { event: '*', schema: 'public', table: 'answers', filter: `request_id=eq.${requestId}` },
+    { ...ANSWER_EVENTS, filter: `request_id=eq.${requestId}` },
     payload => {
-      const record = (payload as { new?: Record<string, unknown> })?.new ?? {};
-      const createdAt = typeof record.created_at === 'string' ? record.created_at : new Date().toISOString();
+      const record = (payload as { new?: Record<string, unknown> })?.new;
+      if (!record) return;
+
+      const answerId = typeof record.id === 'string' ? record.id : null;
+      const text = typeof record.answer === 'string' ? record.answer : null;
+      const createdAt = typeof record.created_at === 'string' ? record.created_at : null;
+
+      if (!answerId || !text || !createdAt) return;
+
       handleRealtimeEvent(
         {
           kind: 'answer.created',
-          id: typeof record.id === 'string' ? record.id : crypto.randomUUID(),
+          id: answerId,
           requestId,
           createdAt,
           answer: {
-            id: typeof record.id === 'string' ? record.id : crypto.randomUUID(),
-            text: typeof record.answer === 'string' ? record.answer : '',
+            id: answerId,
+            text,
             distanceM: typeof record.distance_m === 'number' ? record.distance_m : null,
           },
         },
@@ -51,16 +66,23 @@ export function subscribeToRequestRealtime(
 
   channel.on(
     'postgres_changes',
-    { event: 'UPDATE', schema: 'public', table: 'requests', filter: `id=eq.${requestId}` },
+    {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'requests',
+      filter: `id=eq.${requestId}`,
+    },
     payload => {
-      const record = (payload as { new?: Record<string, unknown> })?.new ?? {};
+      const record = (payload as { new?: Record<string, unknown> })?.new;
+      if (!record || typeof record.status !== 'string') return;
+
       handleRealtimeEvent(
         {
           kind: 'request.status_changed',
-          id: crypto.randomUUID(),
+          id: `${requestId}:${record.status}`,
           requestId,
           createdAt: new Date().toISOString(),
-          status: typeof record.status === 'string' ? record.status : undefined,
+          status: record.status,
         },
         refreshRequest,
       );
