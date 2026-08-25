@@ -2,6 +2,7 @@
   const globalKey = 'NowMainUiRequestAnswersBridge';
   let activeRequestId = null;
   let card = null;
+  let busy = false;
 
   function resolveAdapter() {
     const factory = window.NowSupabaseRequestAnswersAdapter?.createOptionalAdapter;
@@ -9,6 +10,14 @@
     return adapter?.enabled
       ? { adapter, errors: [] }
       : { adapter: null, errors: ['Request answers adapter is not available'] };
+  }
+
+  function resolveFinalizeAdapter() {
+    const factory = window.NowSupabaseFinalizeRequestAdapter?.createOptionalAdapter;
+    const adapter = typeof factory === 'function' ? factory(window.supabase) : null;
+    return adapter?.enabled
+      ? { adapter, errors: [] }
+      : { adapter: null, errors: ['Request finalize adapter is not available'] };
   }
 
   function ensureCard() {
@@ -31,7 +40,26 @@
       </div>
       <div data-answer-latest style="margin-top:10px;font-size:15px"></div>
       <div data-answer-list style="display:grid;gap:6px;margin-top:10px"></div>
+      <button data-finalize-request type="button" style="margin-top:12px;width:100%;border:0;border-radius:12px;padding:12px;background:#151515;color:#fff;font:inherit;font-weight:850">Завершить и показать итог</button>
     `;
+    const button = card.querySelector('[data-finalize-request]');
+    button?.addEventListener('click', async () => {
+      if (busy || !activeRequestId) return;
+      const resolved = resolveFinalizeAdapter();
+      if (!resolved.adapter) return;
+      busy = true;
+      button.disabled = true;
+      button.textContent = 'Завершаем…';
+      try {
+        await resolved.adapter.finalizeRequest(activeRequestId);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = 'Завершить и показать итог';
+        busy = false;
+        const live = card?.querySelector('[data-answer-live]');
+        if (live) live.textContent = error?.message || 'Не удалось завершить запрос';
+      }
+    });
     ask.insertAdjacentElement('afterend', card);
     return card;
   }
@@ -44,6 +72,7 @@
     const latest = root.querySelector('[data-answer-latest]');
     const list = root.querySelector('[data-answer-list]');
     const live = root.querySelector('[data-answer-live]');
+    const finalize = root.querySelector('[data-finalize-request]');
     if (count) count.textContent = answers.length ? `${answers.length} ${answers.length === 1 ? 'ответ' : 'ответа'}` : 'Ждём первый ответ';
     if (latest) latest.textContent = answers.length ? `Последний: ${answers[answers.length - 1].answer}` : '';
     if (list) {
@@ -59,6 +88,13 @@
       else if (terminalStatus === 'EXPIRED') live.textContent = 'Время истекло';
       else if (terminalStatus === 'CANCELLED') live.textContent = 'Запрос отменён';
       else live.textContent = 'Поиск продолжается';
+    }
+    if (finalize) {
+      finalize.hidden = !!terminalStatus;
+      if (!terminalStatus && !busy) {
+        finalize.disabled = false;
+        finalize.textContent = 'Завершить и показать итог';
+      }
     }
   }
 
@@ -76,6 +112,7 @@
   window[globalKey] = Object.freeze({
     bind(requestId) {
       activeRequestId = String(requestId || '').trim() || null;
+      busy = false;
       render([]);
       if (activeRequestId) refresh(activeRequestId).catch(() => {});
       return !!activeRequestId;
@@ -86,13 +123,15 @@
       if (!requestId || requestId !== activeRequestId) return false;
       const eventKind = String(snapshot?.event_kind || '').toUpperCase();
       const status = String(snapshot?.request_status || '').toUpperCase();
+      const answers = Array.isArray(snapshot?.answers) ? snapshot.answers : [];
       if (eventKind === 'REQUEST_ANSWERED') refresh(requestId).catch(() => {});
-      if (['ANSWERED', 'EXPIRED', 'CANCELLED'].includes(status)) render([], status);
-      else if (eventKind === 'REQUEST_ANSWERED') render([], null);
+      if (['ANSWERED', 'EXPIRED', 'CANCELLED'].includes(status)) render(answers, status);
+      else if (eventKind === 'REQUEST_ANSWERED') render(answers, null);
       return true;
     },
     unbind() {
       activeRequestId = null;
+      busy = false;
       if (card) card.hidden = true;
     },
     getActiveRequestId() { return activeRequestId; },
