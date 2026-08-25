@@ -9,6 +9,8 @@
     'supabase-presence-page-bridge.js',
     'supabase-request-answers-adapter.js',
     'main-ui-request-answers-bridge.js',
+    'supabase-finalize-request-adapter.js',
+    'supabase-finalize-request-page-bridge.js',
   ];
 
   function loadScript(src) {
@@ -52,6 +54,7 @@
       window.NowSupabaseCreateRequestPageBridge?.install?.(client);
       window.NowSupabaseAnswerRequestPageBridge?.install?.(client);
       window.NowSupabasePresencePageBridge?.install?.(client);
+      window.NowSupabaseFinalizeRequestPageBridge?.install?.(client);
 
       if (window.NowRealtimePageBridge?.createOptionalBridge) {
         window.NowRequestRealtimeBridge = window.NowRealtimePageBridge.createOptionalBridge({
