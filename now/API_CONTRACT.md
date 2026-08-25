@@ -1,6 +1,6 @@
-# «Сейчас» — API contract v1.1
+# «Сейчас» — API contract v1.2
 
-Цель: зафиксировать контракт до подключения Supabase, чтобы frontend/backend не расходились.
+Цель: фиксировать контракт до подключения Supabase, чтобы frontend/backend не расходились.
 
 ## Entities
 
@@ -10,7 +10,7 @@
 - `text`: string, 1–160 chars
 - `latitude`: number, -90..90
 - `longitude`: number, -180..180
-- `radius_m`: integer, default 1500, max 3000
+- `radius_m`: integer, default 50, max 250
 - `status`: `SEARCHING | ANSWERED | EXPIRED | CANCELLED`
 - `created_at`: ISO timestamp
 - `expires_at`: ISO timestamp
@@ -31,20 +31,30 @@
 - `created_at`: ISO timestamp
 - `distance_m`: number|null
 
-## Rules
+## Nearby notification policy
+
+1. Default notification radius is **50 m** from the request location.
+2. Never send a nearby-request push to users more than **250 m** from the request location.
+3. Expand matching in stages: 50 m → 100 m → 150 m → 250 m, only when the previous stage has too few eligible recipients.
+4. A wider stage must never notify a user if an earlier stage already has enough eligible recipients.
+5. Being in the same neighbourhood, building, street, or district is not sufficient; distance to the request location is what matters.
+6. The user must explicitly opt in to nearby requests (`is_available=true`).
+7. The device's reported location must be fresh and accurate enough for the current matching policy.
+8. Pushes are deduplicated per request/recipient.
+9. The requester can view wider activity on the map manually, but map visibility does not imply a push notification.
+
+## Privacy and security rules
 
 1. Never expose another user's exact coordinates.
 2. Matching is performed server-side/database-side.
 3. Presence is fresh only while `last_seen_at` is within 5 minutes.
-4. Presence must have a cleanup/expiry strategy; stale rows must never receive requests.
-5. A request expires after 10 minutes unless it is answered or cancelled.
+4. Stale presence must never receive requests.
+5. A request expires after 10 minutes unless answered or cancelled.
 6. The client treats realtime events as hints and refreshes authoritative request state when needed.
 7. One user can answer a request only once in MVP.
 8. Push notifications must not contain sensitive location data or exact coordinates.
-9. A user must explicitly opt in to receiving nearby requests (`is_available=true`).
-10. Do not reveal the answerer's identity to the requester in MVP; show freshness/distance only.
-11. The same request must not generate duplicate pushes for the same recipient.
-12. Rate-limit request creation and answers server-side.
+9. Do not reveal the answerer's identity to the requester in MVP; show freshness/distance only.
+10. Rate-limit request creation and answers server-side.
 
 ## Realtime events
 
@@ -57,7 +67,14 @@ Event payloads contain public state/IDs only. Private profile data and exact coo
 
 ## MVP matching
 
-For a request, select fresh available users within `radius_m`. Start with a 1.5 km default radius. If there are too few candidates, the backend may expand it up to 3 km. Rank candidates by distance and freshness. Do not broadcast requests to everyone in the city.
+Candidate selection is performed against the request's exact location, not against the requester's current location. Candidates are considered in stages:
+
+- Stage 1: 0–50 m
+- Stage 2: 50–100 m
+- Stage 3: 100–150 m
+- Stage 4: 150–250 m
+
+The backend ranks candidates by distance and presence freshness. It stops expanding as soon as enough eligible recipients are found. There is no automatic matching beyond 250 m. Do not broadcast requests to everyone in the city.
 
 ## Error contract
 
