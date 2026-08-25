@@ -1,5 +1,7 @@
 (() => {
   const globalKey = 'NowMainUiAnswerBridge';
+  let activeBridge = null;
+  let pendingRequestId = null;
 
   function resolveAdapter() {
     const adapter = window.NowAnswerRequestAdapter;
@@ -9,22 +11,38 @@
     return { adapter, errors: [] };
   }
 
-  function createOptionalBridge({ onSuccess, onError, onStatus } = {}) {
-    const resolved = resolveAdapter();
+  function resolveTargets() {
     const incoming = document.querySelector('#incomingDemo, #incoming');
     const buttons = incoming
       ? [...incoming.querySelectorAll('[data-incoming], [data-answer]')]
       : [];
+    return { incoming, buttons };
+  }
+
+  function createDisabledBridge(errors) {
+    return Object.freeze({
+      enabled: false,
+      errors,
+      bind(requestId) {
+        const normalized = String(requestId || '').trim();
+        if (normalized) pendingRequestId = normalized;
+        return false;
+      },
+      applySnapshot() { return false; },
+      unbind() { pendingRequestId = null; },
+      getActiveRequestId() { return null; },
+    });
+  }
+
+  function createOptionalBridge({ onSuccess, onError, onStatus } = {}) {
+    const resolved = resolveAdapter();
+    const { incoming, buttons } = resolveTargets();
 
     if (!resolved.adapter || !incoming || buttons.length === 0) {
-      return Object.freeze({
-        enabled: false,
-        errors: resolved.errors,
-        bind() { return false; },
-        applySnapshot() { return false; },
-        unbind() {},
-        getActiveRequestId() { return null; },
-      });
+      return createDisabledBridge([
+        ...(resolved.errors || []),
+        ...(!incoming || buttons.length === 0 ? ['Answer UI target is not available'] : []),
+      ]);
     }
 
     let activeRequestId = null;
@@ -33,10 +51,8 @@
     let bound = false;
 
     const setStatus = message => {
-      if (incoming) {
-        const status = incoming.querySelector('[data-answer-status]');
-        if (status) status.textContent = message;
-      }
+      const status = incoming.querySelector('[data-answer-status]');
+      if (status) status.textContent = message;
       (onStatus ?? (() => {}))(message);
     };
 
@@ -95,6 +111,7 @@
 
         const requestId = activeRequestId;
         activeRequestId = null;
+        pendingRequestId = null;
         terminal = true;
         onSuccess?.({ request_id: requestId, answer, result });
         setStatus('Спасибо! Ваш ответ отправлен анонимно');
@@ -103,11 +120,13 @@
         const code = String(error?.code || '').toUpperCase();
         if (code === 'REQUEST_EXPIRED') {
           activeRequestId = null;
+          pendingRequestId = null;
           terminal = true;
           disableButtons(true);
           setStatus('Этот запрос больше не принимает ответы');
         } else if (code === 'ALREADY_ANSWERED') {
           activeRequestId = null;
+          pendingRequestId = null;
           terminal = true;
           disableButtons(true);
           setStatus('На этот запрос уже ответили');
@@ -124,8 +143,10 @@
     const bind = requestId => {
       const normalized = String(requestId || '').trim();
       if (!normalized) return false;
+      pendingRequestId = normalized;
       activeRequestId = normalized;
       terminal = false;
+      incoming.hidden = false;
       incoming.style.display = '';
       buttons.forEach(button => {
         button.hidden = false;
@@ -139,6 +160,7 @@
 
     const unbind = () => {
       activeRequestId = null;
+      pendingRequestId = null;
       busy = false;
       terminal = false;
       buttons.forEach(button => {
@@ -159,13 +181,68 @@
     });
   }
 
-  window[globalKey] = Object.freeze({ resolveAdapter, createOptionalBridge });
+  function ensureActiveBridge() {
+    const resolved = resolveAdapter();
+    const targets = resolveTargets();
+    if (!resolved.adapter || !targets.incoming || targets.buttons.length === 0) return null;
+    if (activeBridge?.enabled) return activeBridge;
+    activeBridge = createOptionalBridge();
+    if (pendingRequestId && activeBridge?.enabled) {
+      activeBridge.bind(pendingRequestId);
+    }
+    return activeBridge?.enabled ? activeBridge : null;
+  }
+
+  function installCaptureHook() {
+    const { incoming, buttons } = resolveTargets();
+    if (!incoming || buttons.length === 0 || incoming.dataset.nowAnswerHook === '1') return;
+    incoming.dataset.nowAnswerHook = '1';
+    const handler = event => {
+      const bridge = ensureActiveBridge();
+      if (!bridge?.enabled || !bridge.getActiveRequestId()) return;
+      const button = event.target?.closest?.('[data-incoming], [data-answer]');
+      if (!button || !incoming.contains(button)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      button.click();
+    };
+    incoming.addEventListener('click', handler, true);
+  }
+
+  const global = {
+    resolveAdapter,
+    createOptionalBridge,
+    ensureActiveBridge,
+    installCaptureHook,
+  };
+
+  window[globalKey] = Object.freeze(global);
   window.NowMainUiAnswerBridge = Object.freeze({
-    enabled: false,
-    errors: [],
-    bind() { return false; },
-    applySnapshot() { return false; },
-    unbind() {},
-    getActiveRequestId() { return null; },
+    get enabled() { return !!activeBridge?.enabled; },
+    get errors() { return activeBridge?.errors || resolveAdapter().errors; },
+    bind(requestId) {
+      const normalized = String(requestId || '').trim();
+      if (!normalized) return false;
+      pendingRequestId = normalized;
+      const bridge = ensureActiveBridge();
+      return bridge ? bridge.bind(normalized) : false;
+    },
+    applySnapshot(snapshot) {
+      const bridge = ensureActiveBridge();
+      return bridge ? bridge.applySnapshot(snapshot) : false;
+    },
+    unbind() {
+      const bridge = activeBridge;
+      activeBridge = null;
+      pendingRequestId = null;
+      return bridge?.unbind?.();
+    },
+    getActiveRequestId() {
+      return activeBridge?.getActiveRequestId?.() || pendingRequestId || null;
+    },
   });
+
+  const boot = () => installCaptureHook();
+  boot();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
 })();
