@@ -41,7 +41,7 @@ While the real create flow is in flight, the button is disabled and marked `aria
 
 The bridge also provides safe browser-page default handlers when `#geo` exists. They consume only the existing `request_status/status` contract: `SEARCHING`, `ANSWERED`, `EXPIRED`, and `CANCELLED` become human-readable request states; `SUBSCRIBED`, `CHANNEL_ERROR`, and Realtime errors update the same lightweight status area. Unknown snapshot fields are ignored, and callers can override any default handler explicitly.
 
-When a snapshot reports a terminal request state (`ANSWERED`, `EXPIRED`, or `CANCELLED`), the bridge first delivers the snapshot to the UI handler and then asynchronously stops the active Realtime lifecycle. This leaves the terminal state visible while releasing the subscription and clearing the active request.
+When a snapshot reports a terminal request state (`ANSWERED`, `EXPIRED`, or `CANCELLED`), the bridge first delivers the snapshot to the UI handler and then asynchronously stops the active Realtime lifecycle. The deferred cleanup captures the request that produced the terminal snapshot and only stops when that same request is still active; a newly-started request is never stopped by an older terminal callback.
 
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
@@ -139,6 +139,17 @@ The harness does not create a Supabase client and does not write production data
 
 The harness does not create a Supabase client and does not write production data.
 
+## Terminal → new request race E2E
+
+`e2e-terminal-switch-race.html` loads the actual `index-integrated.html`, injects an in-memory Realtime adapter, makes request A terminal, and starts request B synchronously from the terminal snapshot callback. It checks:
+
+1. request A reaches its terminal snapshot;
+2. request B becomes the active request;
+3. the deferred terminal cleanup for A does not stop B;
+4. the only stop is the expected A → B lifecycle replacement.
+
+The harness does not create a Supabase client and does not write production data.
+
 ## Deterministic browser E2E
 
 `e2e-realtime-page-bridge.html` loads the contract, lifecycle, and page bridge in a real browser context and checks:
@@ -207,4 +218,6 @@ The harness does not create a Supabase client and does not write production data
 25. Default UI handlers ignore unknown snapshot fields and can be overridden by explicit bridge callbacks.
 26. Terminal `ANSWERED`, `EXPIRED`, or `CANCELLED` snapshots release the active Realtime subscription after the UI callback runs.
 27. The terminal Realtime cleanup E2E passes without requiring Supabase.
-28. No production Supabase client or credentials are created by the browser seam itself.
+28. A terminal callback from request A cannot stop a newly-active request B.
+29. The terminal → new request race E2E passes without requiring Supabase.
+30. No production Supabase client or credentials are created by the browser seam itself.
