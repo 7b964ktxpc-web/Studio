@@ -1,0 +1,97 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now integrated main UI regression E2E</title>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const frame = document.createElement('iframe');
+  frame.src = './index-integrated.html';
+  frame.style.width = '100%';
+  frame.style.height = '720px';
+  frame.style.border = '0';
+  document.body.appendChild(frame);
+
+  const win = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('index-integrated.html load timeout')), 5000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(frame.contentWindow); }, { once: true });
+    frame.addEventListener('error', () => { clearTimeout(timer); reject(new Error('index-integrated.html load failed')); }, { once: true });
+  });
+
+  const bridgeScript = win.document.createElement('script');
+  bridgeScript.src = './main-ui-realtime-bridge.js';
+  win.document.head.appendChild(bridgeScript);
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('main realtime bridge load timeout')), 5000);
+    bridgeScript.addEventListener('load', () => { clearTimeout(timer); resolve(); }, { once: true });
+    bridgeScript.addEventListener('error', () => { clearTimeout(timer); reject(new Error('main realtime bridge load failed')); }, { once: true });
+  });
+
+  const ask = win.document.querySelector('#ask');
+  const question = win.document.querySelector('#question');
+  const geo = win.document.querySelector('#geo');
+  if (!ask || !question || !geo) throw new Error('integrated main UI controls not found');
+
+  // Baseline: with no create adapter, the existing demo handler must remain authoritative.
+  question.value = 'Есть очередь?';
+  let demoToastSeen = false;
+  const originalText = win.document.querySelector('#toast')?.textContent || '';
+  ask.click();
+  await new Promise(resolve => setTimeout(resolve, 30));
+  demoToastSeen = (win.document.querySelector('#toast')?.textContent || '') !== originalText;
+  if (!demoToastSeen) throw new Error('legacy demo click path was not preserved without adapter');
+  if (question.value !== '') throw new Error('legacy demo path did not clear question');
+
+  // Inject deterministic adapters and fake geolocation only after bridge boot.
+  let createCalls = 0;
+  let realtimeStarts = 0;
+  let lastCreatePayload = null;
+  let lastRequestId = null;
+  win.NowCreateRequestAdapter = {
+    async createRequest(payload) {
+      createCalls += 1;
+      lastCreatePayload = payload;
+      return { request_id: 'req-integrated-regression-1' };
+    },
+  };
+  win.NowRealtimeAdapter = {
+    async start(requestId) {
+      realtimeStarts += 1;
+      lastRequestId = requestId;
+    },
+    async stop() {},
+  };
+  win.navigator.geolocation = {
+    getCurrentPosition(success) {
+      success({ coords: { accuracy: 25, latitude: 55.75, longitude: 37.61 } });
+    },
+  };
+
+  question.value = 'Есть ли товар?';
+  ask.click();
+  await new Promise(resolve => setTimeout(resolve, 80));
+  if (createCalls !== 1) throw new Error(`expected one createRequest call, got ${createCalls}`);
+  if (realtimeStarts !== 1) throw new Error(`expected one Realtime start, got ${realtimeStarts}`);
+  if (lastRequestId !== 'req-integrated-regression-1') throw new Error('authoritative request_id was not preserved');
+  if (lastCreatePayload?.accuracy !== undefined) throw new Error('accuracy leaked into create adapter contract');
+  if (lastCreatePayload?.latitude !== 55.75 || lastCreatePayload?.longitude !== 37.61) throw new Error('geolocation payload mismatch');
+  if (question.value !== '') throw new Error('successful create flow did not clear question');
+
+  // Accuracy rejection must not call createRequest().
+  win.navigator.geolocation = {
+    getCurrentPosition(success) {
+      success({ coords: { accuracy: 75, latitude: 55.75, longitude: 37.61 } });
+    },
+  };
+  question.value = 'Очередь большая?';
+  ask.click();
+  await new Promise(resolve => setTimeout(resolve, 40));
+  if (createCalls !== 1) throw new Error('accuracy >50m incorrectly called createRequest');
+  if (!(geo.textContent || '').includes('50')) throw new Error('accuracy rejection status missing');
+
+  out.textContent = 'PASS: integrated #ask preserves demo fallback, late adapter create handoff, authoritative request_id, and ≤50 m accuracy gate.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
