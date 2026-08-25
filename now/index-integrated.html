@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#151515" />
+  <title>Сейчас — Новосибирск</title>
+  <style>
+    :root{--bg:#f5f5f0;--card:#fff;--ink:#151515;--muted:#777;--line:#e7e4de;--green:#2cad5a;--green2:#e8f7ed;--yellow:#f5b51b;--red:#e85e5e}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",sans-serif}
+    .app{max-width:640px;margin:auto;min-height:100vh;padding:16px 14px 108px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}.brand{font-weight:900;font-size:22px}.city{font-size:13px;color:var(--muted)}
+    .hero{margin:18px 0}.eyebrow{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:850}h1{font-size:48px;line-height:.95;letter-spacing:-.06em;margin:9px 0 12px}.hero p{color:#5c5c5c;font-size:16px;line-height:1.45}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:15px;margin:12px 0;box-shadow:0 12px 30px rgba(21,21,21,.06)}
+    .presence{border-color:#d6eadb;background:linear-gradient(180deg,#fbfffc,#f4faf5)}.presenceTop{display:flex;justify-content:space-between;gap:12px;align-items:center}.status{font-weight:900;font-size:18px}.sub{font-size:12px;color:var(--muted);margin-top:4px}.toggle{border:0;border-radius:13px;padding:12px 14px;background:#151515;color:white;font:inherit;font-weight:850}.toggle.on{background:var(--green)}.toggle:disabled{opacity:.55}.metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.metric{border:1px solid var(--line);border-radius:13px;background:#fff;padding:10px}.metric b{display:block;font-size:15px}.metric span{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+    .ask{padding:14px}.q{width:100%;min-height:88px;border:0;resize:none;outline:0;background:transparent;font:inherit;font-size:18px}.row{display:flex;gap:8px;justify-content:space-between;align-items:center}.geo{font-size:12px;color:var(--muted)}.primary{border:0;border-radius:14px;padding:13px 16px;background:var(--green);color:#fff;font:inherit;font-weight:900}.chips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.chip{border:1px solid var(--line);background:#faf9f6;border-radius:12px;padding:11px;font:inherit;font-weight:800;text-align:left}
+    .incoming{border-color:#d2e8d7;background:#f4fbf5}.distance{font-size:12px;color:#4c7956;margin:6px 0}.answers{display:grid;gap:8px;margin-top:10px}.answer{border:0;border-radius:12px;padding:13px;font:inherit;font-weight:850;text-align:left}.yes{background:#dff4e5;color:#137936}.mid{background:#fff1c9;color:#896300}.no{background:#ffe2e2;color:#a23f3f}.unknown{background:#efede8;color:#555}
+    .nearby h2{font-size:17px;margin:0 0 10px}.item{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}.item:last-child{border-bottom:0}.item b{font-size:14px}.badge{border-radius:999px;padding:5px 8px;font-size:10px;font-weight:900;white-space:nowrap}.green{background:var(--green2);color:#137936}.yellow{background:#fff4d6;color:#936600}.red{background:#ffe5e5;color:#a43a3a}
+    .toast{position:fixed;left:50%;top:12px;transform:translate(-50%,-150%);background:#151515;color:#fff;padding:11px 14px;border-radius:13px;font-size:12px;font-weight:800;transition:.2s;z-index:5}.toast.show{transform:translate(-50%,0)}
+    @media(max-width:480px){h1{font-size:42px}.row{flex-direction:column;align-items:stretch}.primary{width:100%}.toggle{width:100%}}
+  </style>
+</head>
+<body>
+<div id="toast" class="toast"></div>
+<main class="app">
+  <header class="top"><div class="brand">Сейчас</div><div class="city">Новосибирск</div></header>
+
+  <section class="hero"><div class="eyebrow">Живая информация рядом</div><h1>Что происходит<br>прямо сейчас?</h1><p>Один вопрос — людям, которые находятся рядом. Только полезные nearby-уведомления, без километра спама.</p></section>
+
+  <section class="card presence" id="presenceCard">
+    <div class="presenceTop"><div><div id="presenceStatus" class="status">Не беспокоить</div><div id="presenceHint" class="sub">Вы не получаете nearby-вопросы</div></div><button id="presenceToggle" class="toggle">Я рядом</button></div>
+    <div class="metrics"><div class="metric"><b id="accuracy">—</b><span>точность геолокации</span></div><div class="metric"><b>50 м</b><span>основной радиус</span></div><div class="metric"><b>250 м</b><span>абсолютный максимум</span></div><div class="metric"><b id="lastSeen">—</b><span>последнее обновление</span></div></div>
+  </section>
+
+  <section class="card ask"><textarea id="question" class="q" maxlength="160" placeholder="Например: «В МФЦ сейчас большая очередь?»"></textarea><div class="row"><div><div id="geo" class="geo">Геолокация не запрошена</div></div><button id="ask" class="primary">Спросить рядом</button></div><div class="chips"><button class="chip" data-preset="Есть очередь?">👥 Есть очередь?</button><button class="chip" data-preset="Работает ли сейчас?">🟢 Работает ли?</button><button class="chip" data-preset="Есть ли товар?">📦 Есть товар?</button><button class="chip" data-preset="Есть свободные места?">🚗 Есть места?</button></div></section>
+
+  <section class="card incoming" id="incoming" hidden>
+    <div class="eyebrow">Вопрос от человека рядом</div><div style="font-size:18px;font-weight:900;margin-top:6px">Есть сейчас очередь в МФЦ?</div><div class="distance">📍 Ты примерно в 38 м от места</div>
+    <div class="answers"><button class="answer yes" data-answer="Нет очереди">🟢 Нет очереди</button><button class="answer mid" data-answer="Очередь небольшая">🟡 Очередь небольшая</button><button class="answer no" data-answer="Очередь большая">🔴 Очередь большая</button><button class="answer unknown" data-answer="Не знаю">Не знаю</button></div>
+  </section>
+
+  <section class="card nearby"><h2>Сейчас рядом</h2><div class="item"><div><b>МФЦ — площадь Труда</b><div class="sub">3 мин назад · 3 ответа</div></div><span class="badge yellow">Небольшая</span></div><div class="item"><div><b>ПВЗ на Фрунзе</b><div class="sub">5 мин назад</div></div><span class="badge green">Свободно</span></div><div class="item"><div><b>АЗС</b><div class="sub">2 мин назад</div></div><span class="badge green">Есть</span></div></section>
+</main>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2200); };
+  const state = { on:false, watch:null, last:null };
+  const render = () => {
+    const status=$('#presenceStatus'), hint=$('#presenceHint'), btn=$('#presenceToggle');
+    if(!state.on){status.textContent='Не беспокоить';hint.textContent='Вы не получаете nearby-вопросы';btn.textContent='Я рядом';btn.classList.remove('on');return;}
+    if(!state.last){status.textContent='Определяем место…';hint.textContent='Пока не участвуете в matching';btn.textContent='Остановить';return;}
+    const a=Math.round(state.last.coords.accuracy);
+    if(a<=50){status.textContent='🟢 Я рядом';hint.textContent='Вы участвуете в nearby matching';btn.textContent='Выключить';btn.classList.add('on');}
+    else{status.textContent='🟡 Уточняем место';hint.textContent='Точность должна быть ±50 м или лучше';btn.textContent='Выключить';btn.classList.remove('on');}
+    $('#accuracy').textContent=`±${a} м`;
+    $('#lastSeen').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+  };
+  const stop=()=>{if(state.watch!==null){navigator.geolocation.clearWatch(state.watch);state.watch=null;}state.on=false;state.last=null;$('#geo').textContent='Геолокация отключена';render();toast('Nearby-уведомления выключены');};
+  const start=()=>{
+    if(!navigator.geolocation){toast('Геолокация недоступна');return;}
+    state.on=true;state.last=null;render();$('#geo').textContent='Определяем ваше место…';
+    state.watch=navigator.geolocation.watchPosition(pos=>{
+      state.last=pos; const a=Math.round(pos.coords.accuracy);
+      $('#geo').textContent=a<=50?`Место подтверждено · точность ±${a} м`:`Точность пока ±${a} м`;
+      render();
+    },()=>{stop();toast('Не удалось получить геолокацию');},{enableHighAccuracy:true,maximumAge:20000,timeout:15000});
+  };
+  $('#presenceToggle').addEventListener('click',()=>state.on?stop():start());
+  document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>$('#question').value=b.dataset.preset));
+  $('#ask').addEventListener('click',()=>{if(!$('#question').value.trim()){toast('Напиши вопрос');return;}toast('Запрос отправлен людям рядом');$('#question').value='';});
+  document.querySelectorAll('[data-answer]').forEach(b=>b.addEventListener('click',()=>{toast('Ответ отправлен');$('#incoming').hidden=true;}));
+  // Demo incoming request only when nearby mode is enabled. Production source will be validated Realtime/Web Push.
+  setTimeout(()=>{if(state.on) $('#incoming').hidden=false;},8000);
+  render();
+})();
+</script>
+</body>
+</html>
