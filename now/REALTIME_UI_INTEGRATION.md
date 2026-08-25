@@ -75,6 +75,18 @@ The harness does not create a Supabase client and does not write production data
 
 The harness does not create a Supabase client and does not write production data.
 
+## Create → Realtime switch E2E
+
+`e2e-create-to-realtime-switch.html` loads the actual `index-integrated.html` and injects deterministic create and Realtime adapters after page boot. It creates request A and then request B through the public `NowCreateAndStartRequest()` handoff. It checks:
+
+1. request A is created and started;
+2. A becomes the active request;
+3. request B is created and started with its own authoritative `request_id`;
+4. the lifecycle invokes `stop()` before B is active, including the controller's initial cleanup;
+5. B is the only active request after the switch.
+
+The harness does not create a Supabase client and does not write production data.
+
 ## Deterministic browser E2E
 
 `e2e-realtime-page-bridge.html` loads the contract, lifecycle, and page bridge in a real browser context and checks:
@@ -133,4 +145,6 @@ The harness does not create a Supabase client and does not write production data
 15. A create result without `request_id` cannot start Realtime.
 16. A failed Realtime start triggers best-effort cleanup and preserves the original start error.
 17. The create → Realtime failure E2E passes without requiring Supabase.
-18. No production Supabase client or credentials are created by the browser seam itself.
+18. A second successful create → Realtime handoff stops the previous request before activating the new request.
+19. The create → Realtime switch E2E passes without requiring Supabase.
+20. No production Supabase client or credentials are created by the browser seam itself.
