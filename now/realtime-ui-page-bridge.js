@@ -62,7 +62,11 @@
       (onSnapshot ?? defaults.onSnapshot)?.(snapshot);
       const status = String(snapshot?.request_status ?? snapshot?.status ?? '').toUpperCase();
       if (['ANSWERED', 'EXPIRED', 'CANCELLED'].includes(status)) {
-        Promise.resolve().then(() => active.stop()).catch(() => {});
+        const terminalRequestId = active?.getActiveRequestId?.() ?? null;
+        Promise.resolve().then(() => {
+          if (terminalRequestId && active.getActiveRequestId() !== terminalRequestId) return;
+          return active.stop();
+        }).catch(() => {});
       }
     };
 
