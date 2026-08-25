@@ -1,0 +1,54 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Request finalization E2E</title>
+<body>
+  <div class="ask"></div>
+  <div id="out">running…</div>
+  <script src="main-ui-request-answers-bridge.js"></script>
+  <script>
+  (async () => {
+    const calls = [];
+    window.NowSupabaseFinalizeRequestAdapter = {
+      createOptionalAdapter() {
+        return {
+          enabled: true,
+          async finalizeRequest(requestId) {
+            calls.push(requestId);
+            return { request_id: requestId, request_status: 'ANSWERED' };
+          },
+        };
+      },
+    };
+    window.NowSupabaseRequestAnswersAdapter = {
+      createOptionalAdapter() {
+        return { enabled: true, async listAnswers() { return [
+          { answer_id: 'a1', answer: 'Нет очереди', created_at: '2026-08-26T00:00:00Z' },
+        ]; } };
+      },
+    };
+
+    if (!window.NowMainUiRequestAnswersBridge.bind('req-final-1')) throw new Error('bind failed');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const card = document.querySelector('#requestAnswersSummary');
+    if (!card || card.hidden) throw new Error('summary card missing');
+
+    const button = card.querySelector('[data-finalize-request]');
+    if (!button) throw new Error('finalize button missing');
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (calls.length !== 1 || calls[0] !== 'req-final-1') throw new Error('finalize adapter mismatch');
+
+    window.NowMainUiRequestAnswersBridge.applySnapshot({
+      request_id: 'req-final-1',
+      request_status: 'ANSWERED',
+      event_kind: 'REQUEST_FINALIZED',
+      answers: [{ answer_id: 'a1', answer: 'Нет очереди' }],
+    });
+
+    const live = card.querySelector('[data-answer-live]');
+    if (!live.textContent.includes('Запрос завершён')) throw new Error('terminal UI mismatch');
+    if (!button.hidden) throw new Error('finalize button still visible');
+    document.querySelector('#out').textContent = 'PASS';
+  })().catch(error => { document.querySelector('#out').textContent = `FAIL: ${error?.message || error}`; });
+  </script>
+</body>
