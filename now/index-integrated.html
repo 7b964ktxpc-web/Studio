@@ -58,6 +58,19 @@
     getActiveRequestId(){ return null; },
   });
 
+  // Public hook for the real create-request adapter. This deliberately does not fabricate
+  // request IDs or backend state from the demo button. A real adapter may call this only
+  // after the authoritative request has been created and an ID is available.
+  const startRequestRealtime = async requestId => {
+    if (!window.NowRequestRealtimeBridge.enabled) return null;
+    const normalized = String(requestId || '').trim();
+    if (!normalized) throw new Error('requestId is required');
+    return window.NowRequestRealtimeBridge.start(normalized);
+  };
+  const stopRequestRealtime = async () => window.NowRequestRealtimeBridge.stop();
+  window.NowStartRequestRealtime = startRequestRealtime;
+  window.NowStopRequestRealtime = stopRequestRealtime;
+
   const state = { on:false, watch:null, last:null };
   const render = () => {
     const status=$('#presenceStatus'), hint=$('#presenceHint'), btn=$('#presenceToggle');
