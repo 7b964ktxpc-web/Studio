@@ -11,8 +11,10 @@
 
   function createOptionalBridge({ onSuccess, onError, onStatus } = {}) {
     const resolved = resolveAdapter();
-    const incoming = document.querySelector('#incomingDemo');
-    const buttons = incoming ? [...incoming.querySelectorAll('[data-incoming]')] : [];
+    const incoming = document.querySelector('#incomingDemo, #incoming');
+    const buttons = incoming
+      ? [...incoming.querySelectorAll('[data-incoming], [data-answer]')]
+      : [];
 
     if (!resolved.adapter || !incoming || buttons.length === 0) {
       return Object.freeze({
@@ -77,7 +79,7 @@
       event.preventDefault();
       event.stopImmediatePropagation();
 
-      const answer = String(button.dataset.incoming || '').trim();
+      const answer = String(button.dataset.incoming || button.dataset.answer || '').trim();
       if (answer.length < 1 || answer.length > 240) {
         setStatus('Ответ должен быть от 1 до 240 символов');
         return;
