@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>now integrated main UI create button E2E</title>
+<body>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const frame = document.createElement('iframe');
+  frame.src = './index-integrated.html';
+  frame.style.width = '100%';
+  frame.style.height = '720px';
+  document.body.appendChild(frame);
+
+  const win = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('integrated page timeout')), 5000);
+    frame.addEventListener('load', () => { clearTimeout(timer); resolve(frame.contentWindow); }, { once: true });
+  });
+
+  const load = src => new Promise((resolve, reject) => {
+    const script = win.document.createElement('script');
+    script.src = src;
+    script.addEventListener('load', resolve, { once: true });
+    script.addEventListener('error', () => reject(new Error(`${src} failed`)), { once: true });
+    win.document.head.appendChild(script);
+  });
+
+  let createCalls = 0;
+  let realtimeStarts = [];
+  win.NowCreateRequestAdapter = {
+    async createRequest(input) {
+      createCalls += 1;
+      if (input.text !== 'Есть очередь?') throw new Error('unexpected question');
+      if (input.latitude !== 55.0 || input.longitude !== 83.0) throw new Error('location mismatch');
+      return { request_id: 'req-integrated-create-1' };
+    },
+  };
+  win.NowRealtimeAdapter = {
+    async start(requestId, handlers) {
+      realtimeStarts.push(requestId);
+      queueMicrotask(() => handlers.onSnapshot?.({ request_id: requestId, request_status: 'SEARCHING' }));
+    },
+    async stop() {},
+  };
+
+  await load('./main-ui-realtime-bridge.js');
+
+  win.navigator.geolocation = {
+    getCurrentPosition(success) {
+      success({ coords: { latitude: 55.0, longitude: 83.0, accuracy: 25 } });
+    },
+  };
+
+  const question = win.document.querySelector('#question');
+  const button = win.document.querySelector('#ask');
+  if (!question || !button) throw new Error('integrated #question/#ask missing');
+  question.value = 'Есть очередь?';
+  button.click();
+
+  await new Promise(resolve => setTimeout(resolve, 100));
+  if (createCalls !== 1) throw new Error(`expected one create call, got ${createCalls}`);
+  if (realtimeStarts.length !== 1 || realtimeStarts[0] !== 'req-integrated-create-1') throw new Error('Realtime request_id handoff mismatch');
+  if (question.value !== '') throw new Error('question was not cleared after successful handoff');
+  if (button.dataset.nowMainCreateBusy !== '0') throw new Error('create button busy flag not restored');
+
+  out.textContent = 'PASS: integrated #ask → geolocation ±25 m → createRequest → authoritative request_id → Realtime.';
+})().catch(error => {
+  document.querySelector('#out').textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
