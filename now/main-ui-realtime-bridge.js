@@ -97,6 +97,7 @@
         async stop() {},
         getActiveRequestId() { return null; },
       });
+      installCreateButtonHook();
       return;
     }
 
@@ -109,10 +110,22 @@
     if (!button || button.dataset.nowMainCreateHook === '1') return false;
     button.dataset.nowMainCreateHook = '1';
 
-    button.addEventListener('click', event => {
-      const bridge = window.NowMainUiRealtimeBridge;
+    button.addEventListener('click', async event => {
+      let bridge = window.NowMainUiRealtimeBridge;
       const createAdapter = window.NowCreateRequestAdapter;
-      if (!bridge?.enabled || !createAdapter || typeof createAdapter.createRequest !== 'function') return;
+      if (!createAdapter || typeof createAdapter.createRequest !== 'function') return;
+
+      if (!bridge?.enabled) {
+        try {
+          await ensureDependencies();
+          bridge = createOptionalBridge();
+          if (!bridge.enabled) return;
+          window.NowMainUiRealtimeBridge = bridge;
+        } catch (_) {
+          return;
+        }
+      }
+
       const question = document.querySelector('#question');
       const geo = document.querySelector('#geo');
       const text = String(question?.value || '').trim();
