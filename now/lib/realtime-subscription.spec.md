@@ -14,11 +14,13 @@
 - subscribes only to UPDATE events for the current request id;
 - accepts only the known lifecycle states;
 - triggers authoritative refresh instead of trusting the event as final state;
-- duplicate delivery of the same lifecycle status does not trigger a second refresh.
+- duplicate delivery of the same lifecycle status does not trigger a second refresh;
+- dedupe memory is bounded to 256 recent event keys per subscription.
 
 ## Cleanup
 
 - `unsubscribe()` detaches the channel;
+- `unsubscribe()` clears the subscription-local dedupe state;
 - repeated cleanup is safe when the transport implementation returns no value.
 
 ## Security
