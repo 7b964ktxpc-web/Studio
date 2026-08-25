@@ -35,6 +35,8 @@ The same bridge exposes `window.NowCreateAndStartRequest(input)`. It accepts a b
 
 When Realtime start fails after request creation, the handoff performs a best-effort `NowStopRequestRealtime()` cleanup and rethrows the original start error. This prevents a partially-created Realtime subscription from surviving a failed handoff without masking the original failure.
 
+The bridge also installs an **opt-in capture-phase hook** on the existing `#ask` button. The hook is active only when both the validated Realtime bridge and a `window.NowCreateRequestAdapter` are present. In that mode, the button reads the question, obtains a fresh high-accuracy browser geolocation, enforces the project limit of **≤50 m**, and then calls `NowCreateAndStartRequest({text, latitude, longitude})`. Without both adapters, the original standalone demo click handler is untouched.
+
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
 ## Active request UI hook
@@ -84,6 +86,19 @@ The harness does not create a Supabase client and does not write production data
 3. request B is created and started with its own authoritative `request_id`;
 4. the lifecycle invokes `stop()` before B is active, including the controller's initial cleanup;
 5. B is the only active request after the switch.
+
+The harness does not create a Supabase client and does not write production data.
+
+## Real create button geolocation E2E
+
+`e2e-real-create-button.html` loads the actual `index-integrated.html`, injects deterministic create and Realtime adapters, and supplies a fake browser geolocation result with **±25 m** accuracy. It checks:
+
+1. the public create hook and opt-in button hook are installed;
+2. the create adapter is called once from the real `#ask` button;
+3. the authoritative `request_id` is passed to Realtime;
+4. the question is cleared only after successful create → Realtime handoff;
+5. the ≤50 m accuracy gate accepts the deterministic ±25 m location;
+6. a second page with no adapters keeps the existing demo button behavior.
 
 The harness does not create a Supabase client and does not write production data.
 
@@ -147,4 +162,7 @@ The harness does not create a Supabase client and does not write production data
 17. The create → Realtime failure E2E passes without requiring Supabase.
 18. A second successful create → Realtime handoff stops the previous request before activating the new request.
 19. The create → Realtime switch E2E passes without requiring Supabase.
-20. No production Supabase client or credentials are created by the browser seam itself.
+20. When real adapters are present, the `#ask` button requires browser geolocation accuracy ≤50 m before calling createRequest.
+21. The real create button E2E passes with deterministic ±25 m geolocation and injected adapters.
+22. Without both real adapters, the original demo button path remains unchanged.
+23. No production Supabase client or credentials are created by the browser seam itself.
