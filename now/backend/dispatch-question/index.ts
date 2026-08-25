@@ -22,6 +22,28 @@ function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number):
   return Math.round(earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+function isValidCoordinate(value: unknown, min: number, max: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
+}
+
+async function authenticate(
+  request: Request,
+  supabaseUrl: string,
+  anonKey: string,
+) {
+  const authorization = request.headers.get("Authorization");
+  if (!authorization?.startsWith("Bearer ")) return null;
+  const token = authorization.slice("Bearer ".length).trim();
+  if (!token) return null;
+
+  const client = createClient(supabaseUrl, anonKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data.user) return null;
+  return data.user;
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -32,6 +54,19 @@ Deno.serve(async (request) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+
+    if (!supabaseUrl || !serviceRoleKey || !anonKey) {
+      return Response.json({ error: "Server is not configured" }, { status: 500, headers: corsHeaders });
+    }
+
+    const user = await authenticate(request, supabaseUrl, anonKey);
+    if (!user) {
+      return Response.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
+    }
+
     const body = await request.json() as {
       questionId?: string;
       lat?: number;
@@ -42,19 +77,10 @@ Deno.serve(async (request) => {
     const { questionId, lat, lng } = body;
     const radiusM = Math.min(Math.max(Number(body.radiusM ?? 1000), MIN_RADIUS_M), MAX_RADIUS_M);
 
-    if (!questionId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+    if (!questionId || !isValidCoordinate(lat, -90, 90) || !isValidCoordinate(lng, -180, 180)) {
       return Response.json(
-        { error: "questionId, lat and lng are required" },
+        { error: "questionId, valid lat and valid lng are required" },
         { status: 400, headers: corsHeaders },
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceRoleKey) {
-      return Response.json(
-        { error: "Server is not configured" },
-        { status: 500, headers: corsHeaders },
       );
     }
 
@@ -66,6 +92,7 @@ Deno.serve(async (request) => {
       .from("questions")
       .select("id,status,expires_at")
       .eq("id", questionId)
+      .eq("user_id", user.id)
       .single();
 
     if (questionError || !question) {
@@ -74,7 +101,7 @@ Deno.serve(async (request) => {
 
     if (question.status !== "waiting" || new Date(question.expires_at).getTime() <= Date.now()) {
       return Response.json(
-        { questionId, recipients: [], reason: "question_inactive" },
+        { questionId, recipientCount: 0, reason: "question_inactive" },
         { headers: corsHeaders },
       );
     }
@@ -82,29 +109,29 @@ Deno.serve(async (request) => {
     const freshnessCutoff = new Date(Date.now() - PRESENCE_FRESHNESS_MS).toISOString();
     const { data: presenceRows, error: presenceError } = await supabase
       .from("presence")
-      .select("id,user_id,lat,lng,updated_at,available")
+      .select("user_id,lat,lng,updated_at")
       .eq("available", true)
       .gte("updated_at", freshnessCutoff)
-      .neq("user_id", null)
+      .neq("user_id", user.id)
       .limit(200);
 
     if (presenceError) {
       return Response.json({ error: "Unable to find nearby users" }, { status: 500, headers: corsHeaders });
     }
 
-    const recipients = (presenceRows ?? [])
-      .map((row) => ({ ...row, distanceM: distanceMeters(lat, lng, row.lat, row.lng) }))
-      .filter((row) => row.distanceM <= radiusM)
-      .sort((a, b) => a.distanceM - b.distanceM)
-      .slice(0, MAX_RECIPIENTS)
-      .map((row) => ({ userId: row.user_id, distanceM: row.distanceM }));
+    const candidates = (presenceRows ?? [])
+      .map((row) => distanceMeters(lat, lng, row.lat, row.lng))
+      .filter((distanceM) => distanceM <= radiusM)
+      .sort((a, b) => a - b)
+      .slice(0, MAX_RECIPIENTS);
 
+    // Do not return user IDs or coordinates to the caller.
+    // The real notification dispatcher should enqueue server-side delivery records here.
     return Response.json(
       {
         questionId,
         radiusM,
-        recipientCount: recipients.length,
-        recipients,
+        recipientCount: candidates.length,
         expiresAt: question.expires_at,
       },
       { headers: corsHeaders },
