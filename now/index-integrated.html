@@ -34,7 +34,7 @@
   <section class="card ask"><textarea id="question" class="q" maxlength="160" placeholder="Например: «В МФЦ сейчас большая очередь?»"></textarea><div class="row"><div><div id="geo" class="geo">Геолокация не запрошена</div></div><button id="ask" class="primary">Спросить рядом</button></div><div class="chips"><button class="chip" data-preset="Есть очередь?">👥 Есть очередь?</button><button class="chip" data-preset="Работает ли сейчас?">🟢 Работает ли?</button><button class="chip" data-preset="Есть ли товар?">📦 Есть товар?</button><button class="chip" data-preset="Есть свободные места?">🚗 Есть места?</button></div></section>
 
   <section class="card incoming" id="incoming" hidden>
-    <div class="eyebrow">Вопрос от человека рядом</div><div style="font-size:18px;font-weight:900;margin-top:6px">Есть сейчас очередь в МФЦ?</div><div class="distance">📍 Ты примерно в 38 м от места</div>
+    <div class="eyebrow">Вопрос от человека рядом</div><div data-nearby-question style="font-size:18px;font-weight:900;margin-top:6px">Есть сейчас очередь в МФЦ?</div><div class="distance" data-nearby-distance>📍 Ты примерно в 38 м от места</div>
     <div class="answers"><button class="answer yes" data-answer="Нет очереди">🟢 Нет очереди</button><button class="answer mid" data-answer="Очередь небольшая">🟡 Очередь небольшая</button><button class="answer no" data-answer="Очередь большая">🔴 Очередь большая</button><button class="answer unknown" data-answer="Не знаю">Не знаю</button></div>
   </section>
 
@@ -54,17 +54,7 @@
 (() => {
   const $ = s => document.querySelector(s);
   const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2200); };
-
-  // Optional Realtime seam. With no injected adapter this is a safe disabled bridge;
-  // the existing standalone demo flow remains the source of truth.
-  window.NowRequestRealtimeBridge = window.NowRealtimePageBridge?.createOptionalBridge?.({}) ?? Object.freeze({
-    enabled:false,
-    errors:['Realtime page bridge unavailable'],
-    async start(){ return null; },
-    async stop(){},
-    getActiveRequestId(){ return null; },
-  });
-
+  window.NowRequestRealtimeBridge = window.NowRealtimePageBridge?.createOptionalBridge?.({}) ?? Object.freeze({ enabled:false, errors:['Realtime page bridge unavailable'], async start(){ return null; }, async stop(){}, getActiveRequestId(){ return null; } });
   const startRequestRealtime = async requestId => {
     if (!window.NowRequestRealtimeBridge.enabled) return null;
     const normalized = String(requestId || '').trim();
@@ -74,7 +64,6 @@
   const stopRequestRealtime = async () => window.NowRequestRealtimeBridge.stop();
   window.NowStartRequestRealtime = startRequestRealtime;
   window.NowStopRequestRealtime = stopRequestRealtime;
-
   const state = { on:false, watch:null, last:null };
   const render = () => {
     const status=$('#presenceStatus'), hint=$('#presenceHint'), btn=$('#presenceToggle');
@@ -87,15 +76,7 @@
     $('#lastSeen').textContent=new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
   };
   const stop=()=>{if(state.watch!==null){navigator.geolocation.clearWatch(state.watch);state.watch=null;}state.on=false;state.last=null;$('#geo').textContent='Геолокация отключена';render();toast('Nearby-уведомления выключены');};
-  const start=()=>{
-    if(!navigator.geolocation){toast('Геолокация недоступна');return;}
-    state.on=true;state.last=null;render();$('#geo').textContent='Определяем ваше место…';
-    state.watch=navigator.geolocation.watchPosition(pos=>{
-      state.last=pos; const a=Math.round(pos.coords.accuracy);
-      $('#geo').textContent=a<=50?`Место подтверждено · точность ±${a} м`:`Точность пока ±${a} м`;
-      render();
-    },()=>{stop();toast('Не удалось получить геолокацию');},{enableHighAccuracy:true,maximumAge:20000,timeout:15000});
-  };
+  const start=()=>{ if(!navigator.geolocation){toast('Геолокация недоступна');return;} state.on=true;state.last=null;render();$('#geo').textContent='Определяем ваше место…'; state.watch=navigator.geolocation.watchPosition(pos=>{ state.last=pos; const a=Math.round(pos.coords.accuracy); $('#geo').textContent=a<=50?`Место подтверждено · точность ±${a} м`:`Точность пока ±${a} м`; render(); },()=>{stop();toast('Не удалось получить геолокацию');},{enableHighAccuracy:true,maximumAge:20000,timeout:15000}); };
   $('#presenceToggle').addEventListener('click',()=>state.on?stop():start());
   document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>$('#question').value=b.dataset.preset));
   $('#ask').addEventListener('click',()=>{if(!$('#question').value.trim()){toast('Напиши вопрос');return;}toast('Запрос отправлен людям рядом');$('#question').value='';});
