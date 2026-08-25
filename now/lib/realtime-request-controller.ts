@@ -2,6 +2,12 @@ import { bindRequestRealtime, type RealtimeRequestBinding } from './realtime-req
 import type { RequestAnswerFlow, RequestSnapshot } from './request-answer-flow';
 import type { RealtimeTransport } from './realtime-subscription';
 
+const TERMINAL_REQUEST_STATUSES = new Set(['ANSWERED', 'EXPIRED', 'CANCELLED']);
+
+function isTerminalSnapshot(snapshot: RequestSnapshot): boolean {
+  return TERMINAL_REQUEST_STATUSES.has(snapshot.status);
+}
+
 export type ActiveRequestRealtimeController = {
   start(requestId: string): Promise<RequestSnapshot>;
   stop(): Promise<void>;
@@ -62,6 +68,11 @@ export function createActiveRequestRealtimeController(deps: {
       if (myGeneration !== generation || activeRequestId !== normalized) {
         throw new Error('Request realtime binding became inactive');
       }
+
+      if (isTerminalSnapshot(snapshot)) {
+        await stop();
+      }
+
       return snapshot;
     } catch (error) {
       if (myGeneration === generation && activeRequestId === normalized) {
@@ -81,6 +92,11 @@ export function createActiveRequestRealtimeController(deps: {
     const myGeneration = generation;
     const snapshot = await binding.refreshNow();
     if (myGeneration !== generation || activeRequestId !== requestId) return null;
+
+    if (isTerminalSnapshot(snapshot)) {
+      await stop();
+    }
+
     return snapshot;
   };
 
