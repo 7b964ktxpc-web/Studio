@@ -11,26 +11,30 @@
 - does not create a Supabase client or fabricate request IDs;
 - without injected adapters the bridge is disabled and the current demo flow remains untouched;
 - when both create and Realtime adapters are injected, the real button path requires geolocation accuracy `<= 50 m` before creating a request;
+- accuracy worse than `50 m` must not call `createRequest()` or start Realtime;
 - the authoritative `request_id` returned by create is the only ID used to start Realtime;
 - duplicate clicks are blocked while create + Realtime handoff is active;
+- repeated loading of the bridge script does not install a second button handler;
 - terminal UI status is driven by authoritative snapshot callbacks.
 
 ## E2E
 
-`e2e-main-ui-realtime-bridge.html` loads the actual `index.html`, dynamically loads only `main-ui-realtime-bridge.js`, verifies that the bridge self-loads its two browser dependencies, injects deterministic in-memory adapters, and verifies the real button path.
+`e2e-main-ui-realtime-bridge.html` loads the actual `index.html`, dynamically loads only `main-ui-realtime-bridge.js`, verifies that the bridge self-loads its two browser dependencies, injects deterministic in-memory adapters, and verifies both rejection and success paths.
 
 1. the main page loads;
 2. `#question`, `#askBtn`, and `#geo` exist;
 3. the bridge script self-loads its adapter contract and lifecycle dependencies;
 4. the bridge is disabled without an injected adapter;
-5. the bridge enables after deterministic adapter injection;
-6. the actual `#askBtn` enters a busy/disabled state;
-7. deterministic browser geolocation at ±25 m is accepted;
-8. `createRequest()` receives the actual question text and coordinates;
-9. the authoritative `request_id` returned by create is passed unchanged to Realtime;
-10. the question is cleared only after successful create → Realtime handoff;
-11. the button restores after the handoff;
-12. no Supabase dependency is required.
+5. a second bridge script load does not duplicate the button hook;
+6. deterministic geolocation accuracy `80 m` is rejected without calling create or Realtime;
+7. the button is restored after the accuracy rejection;
+8. deterministic browser geolocation at `25 m` is accepted;
+9. the actual `#askBtn` enters a busy/disabled state;
+10. `createRequest()` receives the actual question text and coordinates;
+11. the authoritative `request_id` returned by create is passed unchanged to Realtime;
+12. the question is cleared only after successful create → Realtime handoff;
+13. the button restores after the handoff;
+14. no Supabase dependency is required.
 
 The harness intentionally does not modify `index.html`; the current production/demo page remains the regression baseline until the seam is connected by an explicit script tag.
 
