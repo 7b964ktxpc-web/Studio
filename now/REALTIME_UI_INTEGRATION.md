@@ -31,7 +31,9 @@ window.NowRealtimeAdapter = {
 
 `realtime-ui-page-bridge.js` is the opt-in browser bridge. It resolves the validated adapter and creates exactly one active-request UI lifecycle. When the adapter or lifecycle dependency is missing, it returns a safe disabled bridge and does not create a backend fallback.
 
-The same bridge now exposes `window.NowCreateAndStartRequest(input)`. It accepts a browser-injected `window.NowCreateRequestAdapter` with `createRequest(input)`, requires a non-empty returned `request_id`, and only then calls the existing `NowStartRequestRealtime(request_id)` hook. It does not create backend rows itself and never fabricates request IDs.
+The same bridge exposes `window.NowCreateAndStartRequest(input)`. It accepts a browser-injected `window.NowCreateRequestAdapter` with `createRequest(input)`, requires a non-empty returned `request_id`, and only then calls the existing `NowStartRequestRealtime(request_id)` hook. It does not create backend rows itself and never fabricates request IDs.
+
+When Realtime start fails after request creation, the handoff performs a best-effort `NowStopRequestRealtime()` cleanup and rethrows the original start error. This prevents a partially-created Realtime subscription from surviving a failed handoff without masking the original failure.
 
 The standalone `index-integrated.html` loads the three browser seam scripts and exposes `window.NowRequestRealtimeBridge`. Without an injected `window.NowRealtimeAdapter`, the bridge is disabled and the existing offline/demo flow remains the source of truth. No Supabase client, credentials, or production writes are created by this integration.
 
@@ -59,6 +61,17 @@ window.NowStopRequestRealtime()
 5. the Realtime bridge reports the same request as active;
 6. a create result without `request_id` is rejected;
 7. a missing `request_id` does not start Realtime.
+
+The harness does not create a Supabase client and does not write production data.
+
+## Create → Realtime failure E2E
+
+`e2e-create-to-realtime-failure.html` loads the actual `index-integrated.html` and injects a create adapter plus a deterministic Realtime adapter whose `start()` intentionally fails. It checks:
+
+1. the original Realtime start error is preserved;
+2. Realtime start is attempted exactly once;
+3. cleanup `stop()` is attempted after the failed start;
+4. no active request remains after the failed handoff.
 
 The harness does not create a Supabase client and does not write production data.
 
@@ -118,4 +131,6 @@ The harness does not create a Supabase client and does not write production data
 13. The active request hook E2E passes with an injected in-memory adapter without requiring Supabase.
 14. `NowCreateAndStartRequest()` passes through the authoritative `request_id` from the injected create adapter and only then starts Realtime.
 15. A create result without `request_id` cannot start Realtime.
-16. No production Supabase client or credentials are created by the browser seam itself.
+16. A failed Realtime start triggers best-effort cleanup and preserves the original start error.
+17. The create → Realtime failure E2E passes without requiring Supabase.
+18. No production Supabase client or credentials are created by the browser seam itself.
