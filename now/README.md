@@ -111,12 +111,14 @@ Browser seams для create и answer уже соответствуют зафи
 
 Web Push persistence теперь имеет отдельный `supabase-push-adapter.js` и deterministic `e2e-supabase-push-adapter.html`. Реальные browser permissions и VAPID delivery остаются отдельным opt-in шагом: public VAPID key не угадывается и permission не запрашивается автоматически.
 
+Notification queue теперь имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `e2e-supabase-notification-queue.html`. Adapter принимает только injected server client, ограничивает batch до 100 и мапит `claim_notification_events`, `mark_notification_delivered` и `release_notification_event` без хранения service-role credentials в репозитории.
+
 ## Следующий этап
 
 1. Запустить live two-user harness в отдельном `now-mvp` environment.
 2. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
 3. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-4. Провести реальный notification worker/Web Push runtime после предоставления отдельного VAPID configuration.
+4. Подключить `supabase-notification-queue.ts` к реальному service-role worker runtime и провести queue → PushAdapter → delivered/retry E2E; реальный Web Push runtime требует отдельной VAPID configuration.
 5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
 6. Только после этого обсуждать production release.
 
