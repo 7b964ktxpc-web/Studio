@@ -12,3 +12,16 @@
 10. Worker batch size is capped at 100.
 11. Push delivery is independent from Realtime; database state remains authoritative.
 12. Telegram, when added, must implement the same `PushAdapter` contract rather than duplicate queue logic.
+
+## Verified in `now-mvp` integration environment
+
+Read-only database verification confirms the intended permission split:
+
+- `claim_notification_events(integer)`: `SECURITY DEFINER`; `service_role` only; `anon` and `authenticated` cannot execute it.
+- `mark_notification_delivered(uuid)`: `SECURITY DEFINER`; `service_role` only; `anon` and `authenticated` cannot execute it.
+- `release_notification_event(uuid,text,integer)`: `SECURITY DEFINER`; `service_role` only; `anon` and `authenticated` cannot execute it.
+- `upsert_push_subscription(text,text,text,text)`: `SECURITY INVOKER`; `authenticated` only; `anon` cannot execute it; row ownership remains enforced by RLS.
+- `disable_push_subscription(text)`: `SECURITY INVOKER`; `authenticated` only; `anon` cannot execute it; row ownership remains enforced by RLS.
+- `dispatch_nearby_request(uuid,integer)`: `SECURITY DEFINER`; `authenticated` can execute it, but migration 014 requires the current authenticated user to own the active request before dispatch is allowed.
+
+The remaining acceptance items require a real browser/worker runtime; they are not marked PASS by static inspection alone.
