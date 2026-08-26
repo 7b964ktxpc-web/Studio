@@ -26,38 +26,6 @@ jobs:
         with:
           node-version: 22
 
-      - name: Generate VAPID pair and worker secret
-        id: generate
-        shell: bash
-        run: |
-          set -euo pipefail
-          node <<'NODE' > /tmp/webpush.env
-          const crypto = require('crypto');
-          const pair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-          const pub = pair.publicKey.export({ format: 'jwk' });
-          const priv = pair.privateKey.export({ format: 'jwk' });
-          const b64url = (b) => Buffer.from(b).toString('base64url');
-          const publicKey = b64url(Buffer.concat([
-            Buffer.from([0x04]),
-            Buffer.from(pub.x, 'base64url'),
-            Buffer.from(pub.y, 'base64url'),
-          ]));
-          const privateKey = b64url(Buffer.from(priv.d, 'base64url'));
-          const workerSecret = crypto.randomBytes(32).toString('base64url');
-          const subject = 'mailto:now-mvp-preview@example.com';
-          console.log(`publicKey=${publicKey}`);
-          console.log(`privateKey=${privateKey}`);
-          console.log(`workerSecret=${workerSecret}`);
-          console.log(`subject=${subject}`);
-          NODE
-          source /tmp/webpush.env
-          echo "publicKey=$publicKey" >> "$GITHUB_OUTPUT"
-          echo "privateKey=$privateKey" >> "$GITHUB_OUTPUT"
-          echo "workerSecret=$workerSecret" >> "$GITHUB_OUTPUT"
-          echo "subject=$subject" >> "$GITHUB_OUTPUT"
-          echo "::add-mask::$privateKey"
-          echo "::add-mask::$workerSecret"
-
       - name: Verify Vercel token access
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -75,53 +43,15 @@ jobs:
           set -euo pipefail
           npx --yes vercel@latest link --project now-mvp-preview --token "$VERCEL_TOKEN" --yes
 
-      - name: Configure Vercel Preview environment
+      - name: Remove obsolete Vercel Web Push secrets
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VAPID_PUBLIC_KEY: ${{ steps.generate.outputs.publicKey }}
-          VAPID_PRIVATE_KEY: ${{ steps.generate.outputs.privateKey }}
-          VAPID_SUBJECT: ${{ steps.generate.outputs.subject }}
-          NOTIFICATION_WORKER_SECRET: ${{ steps.generate.outputs.workerSecret }}
         shell: bash
         run: |
           set -euo pipefail
-          for name in VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT NOTIFICATION_WORKER_SECRET; do
+          for name in VAPID_PRIVATE_KEY NOTIFICATION_WORKER_SECRET; do
             npx --yes vercel@latest env rm "$name" preview --token "$VERCEL_TOKEN" --yes >/dev/null 2>&1 || true
           done
-          printf '%s\n' "$VAPID_PUBLIC_KEY" | npx --yes vercel@latest env add VAPID_PUBLIC_KEY preview --token "$VERCEL_TOKEN"
-          printf '%s\n' "$VAPID_PRIVATE_KEY" | npx --yes vercel@latest env add VAPID_PRIVATE_KEY preview --token "$VERCEL_TOKEN"
-          printf '%s\n' "$VAPID_SUBJECT" | npx --yes vercel@latest env add VAPID_SUBJECT preview --token "$VERCEL_TOKEN"
-          printf '%s\n' "$NOTIFICATION_WORKER_SECRET" | npx --yes vercel@latest env add NOTIFICATION_WORKER_SECRET preview --token "$VERCEL_TOKEN"
-
-      - name: Update Preview public VAPID key
-        env:
-          VAPID_PUBLIC_KEY: ${{ steps.generate.outputs.publicKey }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import os
-          p = Path('now/web-push-config.js')
-          p.write_text("""(() => {\n  // Preview-only public configuration. Never put VAPID private keys here.\n  window.NowWebPushConfig = Object.freeze({\n    vapidPublicKey: '%s',\n  });\n})();\n""" % os.environ['VAPID_PUBLIC_KEY'])
-          PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add now/web-push-config.js
-          if git diff --cached --quiet; then
-            echo 'Public VAPID key unchanged.'
-          else
-            git commit -m 'Set generated Preview VAPID public key [skip webpush provision]'
-            git push origin HEAD:now-mvp
-          fi
-
-      - name: Deploy Preview
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx --yes vercel@latest --token "$VERCEL_TOKEN" --yes
 
       - name: Verify worker auth gate
         shell: bash
@@ -134,15 +64,59 @@ jobs:
           echo "unauthorized status=$status"
           test "$status" = '401'
 
-      - name: Verify worker runtime configuration
-        env:
-          NOTIFICATION_WORKER_SECRET: ${{ steps.generate.outputs.workerSecret }}
+      - name: Read authoritative Supabase VAPID public key
         shell: bash
         run: |
           set -euo pipefail
-          body=$(curl -sS -X POST \
+          curl -fsS \
             'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker' \
-            -H 'content-type: application/json' \
-            -H "x-notification-worker-secret: $NOTIFICATION_WORKER_SECRET" \
-            --data '{"batchSize":1}')
-          echo "$body" | grep -Eq '"delivered"|"retried"|"failed"'
+            > /tmp/worker-health.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('/tmp/worker-health.json', 'utf8'));
+          if (body.ok !== true || typeof body.vapidPublicKey !== 'string' || body.vapidPublicKey.length < 80) {
+            console.error(JSON.stringify(body));
+            process.exit(1);
+          }
+          fs.writeFileSync('/tmp/vapid-public-key', body.vapidPublicKey + '\n');
+          NODE
+          echo 'Supabase notification-worker configuration is healthy.'
+
+      - name: Update Preview public VAPID key
+        shell: bash
+        run: |
+          set -euo pipefail
+          VAPID_PUBLIC_KEY=$(cat /tmp/vapid-public-key)
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          key = Path('/tmp/vapid-public-key').read_text().strip()
+          p = Path('now/web-push-config.js')
+          p.write_text("""(() => {\n  // Preview-only public configuration. Never put VAPID private keys here.\n  window.NowWebPushConfig = Object.freeze({\n    vapidPublicKey: '%s',\n  });\n})();\n""" % key)
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add now/web-push-config.js
+          if git diff --cached --quiet; then
+            echo 'Public VAPID key unchanged.'
+          else
+            git commit -m 'Sync Preview VAPID public key [skip webpush provision]'
+            git push origin HEAD:now-mvp
+          fi
+
+      - name: Deploy Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest --token "$VERCEL_TOKEN" --yes
+
+      - name: Verify worker runtime configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(curl -fsS \
+            'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker')
+          echo "$body" | grep -Eq '"ok":true'
+          echo 'worker runtime configuration: OK'
