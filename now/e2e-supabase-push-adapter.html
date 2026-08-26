@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Supabase push adapter E2E</title>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const calls = [];
+  const client = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      if (name === 'upsert_push_subscription') return { data: true, error: null };
+      if (name === 'disable_push_subscription') return { data: true, error: null };
+      throw new Error(`Unexpected RPC: ${name}`);
+    },
+  };
+  window.supabase = client;
+
+  await new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = './supabase-push-adapter.js';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('failed to load push adapter'));
+    document.head.appendChild(script);
+  });
+
+  const adapter = window.NowSupabasePushAdapter?.createOptionalAdapter?.(client);
+  if (!adapter?.enabled) throw new Error('push adapter disabled');
+
+  const payload = {
+    endpoint: 'https://push.example/subscription/1',
+    p256dh: 'p256dh-test-value',
+    auth: 'auth-test-value',
+    userAgent: 'e2e-browser',
+  };
+  if (!(await adapter.saveSubscription(payload))) throw new Error('save returned false');
+  if (!(await adapter.disableSubscription(payload.endpoint))) throw new Error('disable returned false');
+
+  if (calls.length !== 2) throw new Error(`expected 2 RPC calls, got ${calls.length}`);
+  if (calls[0].name !== 'upsert_push_subscription') throw new Error('wrong save RPC');
+  if (calls[0].args.p_endpoint !== payload.endpoint || calls[0].args.p_p256dh !== payload.p256dh || calls[0].args.p_auth !== payload.auth || calls[0].args.p_user_agent !== payload.userAgent) throw new Error('save RPC payload mismatch');
+  if (calls[1].name !== 'disable_push_subscription' || calls[1].args.p_endpoint !== payload.endpoint) throw new Error('disable RPC payload mismatch');
+
+  out.textContent = 'PASS: Web Push persistence adapter preserves the browser subscription contract.';
+})().catch(error => {
+  out.textContent = `FAIL: ${error?.message || error}`;
+  console.error(error);
+});
+</script>
