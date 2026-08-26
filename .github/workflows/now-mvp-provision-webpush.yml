@@ -1,0 +1,142 @@
+name: Provision now-mvp Preview Web Push
+
+on:
+  push:
+    branches: [now-mvp]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  provision:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.head_commit.message == 'Provision Preview Web Push runtime'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout now-mvp
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: now-mvp
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate VAPID pair and worker secret
+        id: generate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE' > /tmp/webpush.env
+          const crypto = require('crypto');
+          const pair = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+          const jwkPublic = pair.publicKey.export({ format: 'jwk' });
+          const jwkPrivate = pair.privateKey.export({ format: 'jwk' });
+          const toB64Url = (b) => Buffer.from(b).toString('base64url');
+          const publicKey = toB64Url(Buffer.concat([
+            Buffer.from([0x04]),
+            Buffer.from(jwkPublic.x, 'base64url'),
+            Buffer.from(jwkPublic.y, 'base64url'),
+          ]));
+          const privateKey = toB64Url(Buffer.from(jwkPrivate.d, 'base64url'));
+          const workerSecret = crypto.randomBytes(32).toString('base64url');
+          const subject = 'mailto:now-mvp-preview@example.com';
+          for (const [k, v] of Object.entries({publicKey, privateKey, workerSecret, subject})) {
+            console.log(`${k}=${v}`);
+          }
+          NODE
+
+          source /tmp/webpush.env
+          echo "privateKey=$privateKey" >> "$GITHUB_OUTPUT"
+          echo "publicKey=$publicKey" >> "$GITHUB_OUTPUT"
+          echo "workerSecret=$workerSecret" >> "$GITHUB_OUTPUT"
+          echo "subject=$subject" >> "$GITHUB_OUTPUT"
+          echo "::add-mask::$privateKey"
+          echo "::add-mask::$workerSecret"
+
+      - name: Configure Vercel Preview environment
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_SCOPE: GIN
+          VERCEL_PROJECT: now-mvp-preview
+          VAPID_PUBLIC_KEY: ${{ steps.generate.outputs.publicKey }}
+          VAPID_PRIVATE_KEY: ${{ steps.generate.outputs.privateKey }}
+          VAPID_SUBJECT: ${{ steps.generate.outputs.subject }}
+          NOTIFICATION_WORKER_SECRET: ${{ steps.generate.outputs.workerSecret }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$VERCEL_TOKEN"
+          npx --yes vercel@latest link --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes
+
+          for name in VAPID_PUBLIC_KEY VAPID_PRIVATE_KEY VAPID_SUBJECT NOTIFICATION_WORKER_SECRET; do
+            npx --yes vercel@latest env rm "$name" preview --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes >/dev/null 2>&1 || true
+          done
+
+          printf '%s\n' "$VAPID_PUBLIC_KEY" | npx --yes vercel@latest env add VAPID_PUBLIC_KEY preview --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes
+          printf '%s\n' "$VAPID_PRIVATE_KEY" | npx --yes vercel@latest env add VAPID_PRIVATE_KEY preview --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes
+          printf '%s\n' "$VAPID_SUBJECT" | npx --yes vercel@latest env add VAPID_SUBJECT preview --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes
+          printf '%s\n' "$NOTIFICATION_WORKER_SECRET" | npx --yes vercel@latest env add NOTIFICATION_WORKER_SECRET preview --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --yes
+
+      - name: Update Preview public VAPID key
+        env:
+          VAPID_PUBLIC_KEY: ${{ steps.generate.outputs.publicKey }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > now/web-push-config.js <<'EOF'
+          (() => {
+            // Preview-only public configuration. Never put VAPID private keys here.
+            window.NowWebPushConfig = Object.freeze({
+              vapidPublicKey: '__VAPID_PUBLIC_KEY__',
+            });
+          })();
+          EOF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('now/web-push-config.js')
+          text = p.read_text()
+          key = __import__('os').environ['VAPID_PUBLIC_KEY']
+          p.write_text(text.replace('__VAPID_PUBLIC_KEY__', key))
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add now/web-push-config.js
+          git diff --cached --quiet || git commit -m 'Set generated Preview VAPID public key [skip webpush provision]'
+          git push origin HEAD:now-mvp
+
+      - name: Deploy Preview
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest --token "$VERCEL_TOKEN" --scope GIN --yes
+
+      - name: Verify worker auth gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          status=$(curl -sS -o /tmp/worker-unauthorized.txt -w '%{http_code}' \
+            -X POST 'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker' \
+            -H 'content-type: application/json' \
+            --data '{"batchSize":1}')
+          test "$status" = '401'
+
+      - name: Verify worker runtime configuration
+        env:
+          NOTIFICATION_WORKER_SECRET: ${{ steps.generate.outputs.workerSecret }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(curl -sS -X POST \
+            'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker' \
+            -H 'content-type: application/json' \
+            -H "x-notification-worker-secret: $NOTIFICATION_WORKER_SECRET" \
+            --data '{"batchSize":1}')
+          echo "$body" | grep -Eq '"delivered"|"retried"|"failed"'
