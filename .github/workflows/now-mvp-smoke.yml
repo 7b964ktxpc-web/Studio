@@ -1,0 +1,72 @@
+name: now-mvp smoke
+
+on:
+  push:
+    branches:
+      - now-mvp
+  pull_request:
+    branches:
+      - now-mvp
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required preview files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f vercel.json
+          test -f now/index.html
+          test -f now/index-integrated.html
+          test -f now/e2e-live-two-user-supabase-flow.html
+          test -f now/e2e-live-two-user-lifecycle.html
+          test -f now/backend/notification-worker/index.ts
+
+      - name: Validate Vercel routing JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('vercel.json').read_text())
+          assert isinstance(data.get('routes'), list), 'routes must be an array'
+          routes = data['routes']
+          text = json.dumps(routes)
+          assert '/now/backend/' in text, 'backend deny route missing'
+          assert 'now/index-integrated.html' in text, 'integrated route missing'
+          assert 'now/index.html' in text, 'baseline route missing'
+          print('vercel.json routing contract: OK')
+          PY
+
+      - name: Verify worker secrets are not committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' now backend 2>/dev/null; then
+            echo 'Possible committed service-role secret found.'
+            exit 1
+          fi
+          if grep -RInE 'VAPID_PRIVATE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' now backend 2>/dev/null; then
+            echo 'Possible committed VAPID private key found.'
+            exit 1
+          fi
+          echo 'No obvious committed worker private secret detected.'
+
+      - name: Verify STO-NSK isolation markers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -RInE 'sto-nsk|STO-NSK' now vercel.json .github/workflows 2>/dev/null; then
+            echo 'Unexpected STO-NSK reference found in now-mvp preview assets/workflows.'
+            exit 1
+          fi
+          echo 'STO-NSK isolation check: OK'
