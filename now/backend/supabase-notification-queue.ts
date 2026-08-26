@@ -9,7 +9,7 @@ export type NotificationEvent = {
   id: string;
   userId: string;
   requestId: string | null;
-  kind: 'NEW_NEARBY_REQUEST' | 'REQUEST_ANSWERED' | 'REQUEST_EXPIRED';
+  kind: 'NEW_NEARBY_REQUEST' | 'REQUEST_ANSWERED' | 'REQUEST_FINALIZED' | 'REQUEST_EXPIRED';
   attempts: number;
 };
 
@@ -26,7 +26,7 @@ function toEvent(row: Record<string, unknown>): NotificationEvent {
   const attempts = Number(row.attempts);
 
   if (!id || !userId) throw new Error('Notification queue returned an invalid event identity');
-  if (!['NEW_NEARBY_REQUEST', 'REQUEST_ANSWERED', 'REQUEST_EXPIRED'].includes(kind)) {
+  if (!['NEW_NEARBY_REQUEST', 'REQUEST_ANSWERED', 'REQUEST_FINALIZED', 'REQUEST_EXPIRED'].includes(kind)) {
     throw new Error(`Notification queue returned an unsupported event kind: ${kind}`);
   }
   if (!Number.isInteger(attempts) || attempts < 1) throw new Error('Notification queue returned an invalid attempts value');
