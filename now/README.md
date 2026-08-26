@@ -34,6 +34,7 @@
 - демо потока ответа;
 - PWA manifest + Service Worker + offline cache;
 - Web Push client adapter;
+- Supabase push persistence adapter (`upsert_push_subscription` / `disable_push_subscription`);
 - notification center с дедупликацией;
 - безопасная проверка Realtime events;
 - Supabase Realtime subscription adapter;
@@ -58,7 +59,8 @@
 - Supabase `answer_request` adapter contract + page bridge;
 - deterministic E2E harnesses для create, answer, accuracy, switching и двухпользовательского request_id flow;
 - live authenticated two-user Supabase E2E harness;
-- live lifecycle E2E harness для duplicate-answer/finalization/reconnect.
+- live lifecycle E2E harness для duplicate-answer/finalization/reconnect;
+- deterministic Web Push persistence E2E.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -87,7 +89,9 @@
 - `pgcrypto` установлен в схеме `extensions`;
 - ключевые RPC присутствуют с финальными сигнатурами;
 - browser-facing `create_request` и `answer_request` остаются `SECURITY INVOKER`;
-- privileged dispatch/read RPC имеют явные role grants и ownership checks.
+- privileged dispatch/read RPC имеют явные role grants и ownership checks;
+- worker-only notification queue RPC доступны только `service_role`;
+- push subscription writes доступны только `authenticated` и защищены RLS.
 
 Supabase advisors в integration environment показывают ожидаемые предупреждения вокруг PostGIS в `public` и некоторых `SECURITY DEFINER` RPC. Эти предупреждения не маскируем изменением permissions вслепую: часть функций (`dispatch_nearby_request`, `my_request`, `nearby_request_for_answer`) намеренно является privileged API с проверками `auth.uid()` внутри.
 
@@ -105,12 +109,14 @@ Browser seams для create и answer уже соответствуют зафи
 
 Добавлен `e2e-live-two-user-lifecycle.html` для duplicate-answer, single-shot finalization и reconnect после terminal state. Этот harness также не считается PASS без реального браузерного запуска.
 
+Web Push persistence теперь имеет отдельный `supabase-push-adapter.js` и deterministic `e2e-supabase-push-adapter.html`. Реальные browser permissions и VAPID delivery остаются отдельным opt-in шагом: public VAPID key не угадывается и permission не запрашивается автоматически.
+
 ## Следующий этап
 
 1. Запустить live two-user harness в отдельном `now-mvp` environment.
 2. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
 3. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-4. Проверить notification worker end-to-end на `notification_events` и Web Push.
+4. Провести реальный notification worker/Web Push runtime после предоставления отдельного VAPID configuration.
 5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
 6. Только после этого обсуждать production release.
 
