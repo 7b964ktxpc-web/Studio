@@ -1,0 +1,50 @@
+name: now-mvp preview ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      disable_sso:
+        description: "Disable Vercel SSO protection for the now-mvp-preview project"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  preview-ops:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout now-mvp
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Verify target project
+        run: |
+          set -euo pipefail
+          test "now-mvp-preview" = "now-mvp-preview"
+
+      - name: Optionally disable SSO only on now-mvp-preview
+        if: ${{ inputs.disable_sso }}
+        run: |
+          set -euo pipefail
+          vercel project protection disable now-mvp-preview --sso --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy only now-mvp-preview from now/
+        run: |
+          set -euo pipefail
+          cd now
+          vercel link --yes --project now-mvp-preview --scope gin8 --token "$VERCEL_TOKEN"
+          vercel deploy --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
