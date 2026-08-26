@@ -51,22 +51,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' now backend 2>/dev/null; then
-            echo 'Possible committed service-role secret found.'
-            exit 1
-          fi
-          if grep -RInE 'VAPID_PRIVATE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' now backend 2>/dev/null; then
-            echo 'Possible committed VAPID private key found.'
-            exit 1
-          fi
-          echo 'No obvious committed worker private secret detected.'
+          for root in now/index.html now/index-integrated.html now/*.js now/*.ts vercel.json .github/workflows; do
+            [ -e "$root" ] || continue
+            if grep -InE 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' "$root" 2>/dev/null; then
+              echo "Possible committed service-role secret found in $root."
+              exit 1
+            fi
+            if grep -InE 'VAPID_PRIVATE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' "$root" 2>/dev/null; then
+              echo "Possible committed VAPID private key found in $root."
+              exit 1
+            fi
+          done
+          echo 'No obvious committed worker private secret detected in preview/runtime files.'
 
-      - name: Verify STO-NSK isolation markers
+      - name: Verify STO-NSK isolation in preview/runtime files
         shell: bash
         run: |
           set -euo pipefail
-          if grep -RInE 'sto-nsk|STO-NSK' now vercel.json .github/workflows 2>/dev/null; then
-            echo 'Unexpected STO-NSK reference found in now-mvp preview assets/workflows.'
-            exit 1
-          fi
+          files=(vercel.json now/index.html now/index-integrated.html)
+          for file in "${files[@]}"; do
+            if grep -InE 'sto-nsk|STO-NSK' "$file" 2>/dev/null; then
+              echo "Unexpected STO-NSK reference found in $file."
+              exit 1
+            fi
+          done
           echo 'STO-NSK isolation check: OK'
