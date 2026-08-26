@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Web Push browser contract</title>
+<pre id="out">running…</pre>
+<script src="../web-push-config.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  try {
+    const key = String(window.NowWebPushConfig?.vapidPublicKey || '').trim();
+    if (key.length < 80) throw new Error('Preview VAPID public key is not configured');
+    const clientSource = await fetch('../web-push-client.js').then(r => r.text());
+    if (!clientSource.includes("applicationServerKey: base64UrlToUint8Array(vapidPublicKey)")) throw new Error('PushManager subscription contract missing');
+    if (!clientSource.includes("upsert_push_subscription")) throw new Error('subscription RPC contract missing');
+    const sw = await fetch('../notification-worker-sw.js').then(r => r.text());
+    if (!sw.includes("self.addEventListener('push'")) throw new Error('service worker push handler missing');
+    if (!sw.includes("showNotification")) throw new Error('notification display path missing');
+    out.textContent = 'PASS: Preview VAPID public key, browser subscription, persistence RPC, and service-worker push contract are wired.';
+  } catch (error) {
+    out.textContent = `FAIL: ${error.message}`;
+    console.error(error);
+  }
+})();
+</script>
