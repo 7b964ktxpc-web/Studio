@@ -18,6 +18,13 @@
 - presence учитывается только при свежести до **5 минут**;
 - для nearby matching точность геолокации должна быть **≤ 50 м**.
 
+### Regression safety
+
+- работаем только в ветке `now-mvp`;
+- `STO-NSK` не подключаем и не изменяем;
+- `now/index.html` остаётся baseline, основной новый flow тестируется через browser seams и deterministic E2E;
+- production Supabase не используется для разработки MVP.
+
 ## Уже подготовлено
 
 ### Клиент
@@ -61,28 +68,47 @@
 - Web Push subscriptions;
 - Realtime + notification flow;
 - draft RPC `public.create_request(text, latitude, longitude)`;
-- draft RPC `public.answer_request(request_id, answer)`.
+- draft RPC `public.answer_request(request_id, answer)`;
+- draft RPC `public.finalize_request(request_id)`.
 
-Все SQL-файлы в `now/backend/` пока являются **draft migrations**. Их нельзя применять к старой или любой другой базе.
+Все SQL-файлы в `now/backend/` являются **draft migrations**. Их нельзя применять к `STO-NSK` или к другой существующей базе.
 
-## Важное ограничение
+## Отдельная integration environment
 
-Для нового проекта используется только отдельная Supabase-база. Старую инфраструктуру STO-NSK не подключаем.
+Для «Сейчас» уже существует отдельный Supabase-проект `now-mvp`, отдельно от `sto-nsk`. Он используется только как integration environment.
+
+Фактически проверено в `now-mvp`:
+
+- проект активен и здоров;
+- RLS включён на `requests`, `presence`, `answers`, `notification_events`, `push_subscriptions`;
+- `notification_events` подключён к публикации `supabase_realtime`;
+- `pgcrypto` установлен в схеме `extensions`;
+- ключевые RPC присутствуют с финальными сигнатурами;
+- browser-facing `create_request` и `answer_request` остаются `SECURITY INVOKER`;
+- privileged dispatch/read RPC имеют явные role grants и ownership checks.
+
+Supabase advisors в integration environment показывают ожидаемые предупреждения вокруг PostGIS в `public` и некоторых `SECURITY DEFINER` RPC. Эти предупреждения не маскируем изменением permissions вслепую: часть функций (`dispatch_nearby_request`, `my_request`, `nearby_request_for_answer`) намеренно является privileged API с проверками `auth.uid()` внутри.
+
+## Draft migration order
+
+Полный порядок и sequencing notes находятся в `now/backend/BACKEND_DRAFT_APPLY_ORDER.md`.
+
+Важное замечание: два файла `004_*.sql` — намеренная часть draft order и должны применяться оба до `005_notification_queue.sql`.
 
 ## Текущий интеграционный статус
 
-Browser seams для create и answer уже соответствуют зафиксированным draft RPC и проходят deterministic rehearsal. Реальный Supabase client намеренно не создаётся кодом проекта: он должен быть injected только в отдельном новом Supabase environment.
+Browser seams для create и answer уже соответствуют зафиксированным draft RPC и проходят deterministic rehearsal. Реальный Supabase client намеренно не создаётся в production UI.
 
-`now/index.html` остаётся baseline и не переводился насильно на новый flow. Интеграционная проверка проводится через `index-integrated.html` и отдельные E2E harnesses.
+Следующий безопасный рубеж — **реальный authenticated two-user E2E в отдельной `now-mvp` environment**, а не подключение `STO-NSK` или production traffic.
 
 ## Следующий этап
 
-1. Создать отдельный **новый Supabase project** для «Сейчас».
-2. Применить draft migrations только туда после проверки порядка миграций и RLS.
-3. Inject authenticated Supabase client в integration environment.
-4. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-5. Проверить reconnect/expiry/duplicate-answer/terminal lifecycle в реальном браузере.
-6. После этого привязать `now-mvp` к отдельному preview hosting target и только затем переходить к production release.
+1. Поднять authenticated browser sessions в отдельной `now-mvp` environment.
+2. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
+3. Проверить reconnect/expiry/duplicate-answer/terminal lifecycle в реальном браузере.
+4. Проверить notification worker end-to-end на `notification_events` и Web Push.
+5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
+6. Только после этого обсуждать production release.
 
 ## Принцип MVP
 
