@@ -57,7 +57,8 @@
 - Supabase `create_request` adapter contract + page bridge;
 - Supabase `answer_request` adapter contract + page bridge;
 - deterministic E2E harnesses для create, answer, accuracy, switching и двухпользовательского request_id flow;
-- live authenticated two-user Supabase E2E harness.
+- live authenticated two-user Supabase E2E harness;
+- live lifecycle E2E harness для duplicate-answer/finalization/reconnect.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -102,11 +103,13 @@ Browser seams для create и answer уже соответствуют зафи
 
 Добавлен `e2e-live-two-user-supabase-flow.html` и acceptance-документ `LIVE_TWO_USER_SUPABASE_E2E.md`. Harness рассчитан на запуск в браузере против отдельного `now-mvp` project с Anonymous Sign-Ins. Он не считается PASS, пока не прошёл полный authenticated flow на реальном endpoint.
 
+Добавлен `e2e-live-two-user-lifecycle.html` для duplicate-answer, single-shot finalization и reconnect после terminal state. Этот harness также не считается PASS без реального браузерного запуска.
+
 ## Следующий этап
 
 1. Запустить live two-user harness в отдельном `now-mvp` environment.
-2. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-3. Проверить reconnect/expiry/duplicate-answer/terminal lifecycle в реальном браузере.
+2. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
+3. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
 4. Проверить notification worker end-to-end на `notification_events` и Web Push.
 5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
 6. Только после этого обсуждать production release.
