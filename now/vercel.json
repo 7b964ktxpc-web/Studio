@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "routes": [
+    { "src": "/backend(?:/.*)?", "status": 404 },
+    { "src": "/", "dest": "/index.html" },
+    { "src": "/index-integrated.html", "dest": "/index-integrated.html" },
+    { "src": "/e2e-(.*)", "dest": "/e2e-$1" },
+    { "handle": "filesystem" }
+  ]
+}
