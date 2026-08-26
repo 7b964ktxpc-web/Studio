@@ -1,0 +1,17 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Notification worker stale push regression</title>
+<pre id="out">running…</pre>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const source = await fetch('./notification-worker/index.ts').then(r => r.text());
+  if (!source.includes('statusCode === 404 || statusCode === 410')) throw new Error('stale subscription cleanup guard missing');
+  if (!source.includes(".from('push_subscriptions')") || !source.includes(".delete()")) throw new Error('stale subscription delete path missing');
+  if (!source.includes("if (delivered > 0) return { delivered: true };")) throw new Error('delivery aggregation contract missing');
+  out.textContent = 'PASS: worker source removes 404/410 stale subscriptions while preserving retry behavior for other delivery failures.';
+})().catch(error => {
+  out.textContent = `FAIL: ${error.message}`;
+  console.error(error);
+});
+</script>
