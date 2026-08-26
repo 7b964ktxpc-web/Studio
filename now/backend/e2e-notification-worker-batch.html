@@ -1,0 +1,52 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Notification worker batch E2E</title>
+<pre id="out">running…</pre>
+<script type="module">
+import { processNotificationBatch } from './notification-worker.ts';
+
+const out = document.querySelector('#out');
+const events = [
+  { id: 'evt-1', userId: 'user-1', requestId: 'req-1', kind: 'REQUEST_FINALIZED', attempts: 1 },
+  { id: 'evt-2', userId: 'user-2', requestId: 'req-2', kind: 'REQUEST_ANSWERED', attempts: 2 },
+];
+const marked = [];
+const released = [];
+let pushCalls = [];
+
+const queue = {
+  async claim(batchSize) {
+    if (batchSize !== 100) throw new Error(`batch cap mismatch: ${batchSize}`);
+    return events;
+  },
+  async markDelivered(id) {
+    marked.push(id);
+    return true;
+  },
+  async release(id, error, retrySeconds) {
+    released.push({ id, error, retrySeconds });
+    return true;
+  },
+};
+
+const push = {
+  async send(userId, event) {
+    pushCalls.push({ userId, kind: event.kind });
+    if (event.id === 'evt-1') return { delivered: true };
+    return { delivered: false, error: 'provider unavailable', retrySeconds: 45 };
+  },
+};
+
+try {
+  const result = await processNotificationBatch(queue, push, 999);
+  if (result.delivered !== 1 || result.retried !== 1 || result.failed !== 0) throw new Error(`unexpected result: ${JSON.stringify(result)}`);
+  if (marked.length !== 1 || marked[0] !== 'evt-1') throw new Error('markDelivered contract mismatch');
+  if (released.length !== 1 || released[0].id !== 'evt-2' || released[0].retrySeconds !== 45) throw new Error('release contract mismatch');
+  if (pushCalls.length !== 2) throw new Error('push call count mismatch');
+  if (!pushCalls.some(call => call.kind === 'REQUEST_FINALIZED')) throw new Error('REQUEST_FINALIZED was not delivered through worker');
+  out.textContent = 'PASS: worker batch caps at 100, marks successful delivery, retries failed delivery, and processes REQUEST_FINALIZED.';
+} catch (error) {
+  out.textContent = `FAIL: ${error.message}`;
+  console.error(error);
+}
+</script>
