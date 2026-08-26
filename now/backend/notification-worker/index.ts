@@ -69,6 +69,25 @@ function createPushAdapter(client: ReturnType<typeof createClient>): PushAdapter
           );
           delivered += 1;
         } catch (error) {
+          const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+            ? Number((error as { statusCode?: unknown }).statusCode)
+            : NaN;
+
+          if (statusCode === 404 || statusCode === 410) {
+            const endpoint = String(subscription.endpoint || '').trim();
+            if (endpoint) {
+              const { error: removeError } = await client
+                .from('push_subscriptions')
+                .delete()
+                .eq('user_id', userId)
+                .eq('endpoint', endpoint);
+              if (removeError) {
+                failures.push(removeError.message || 'Failed to remove stale push subscription');
+              }
+            }
+            continue;
+          }
+
           failures.push(error instanceof Error ? error.message : 'Push delivery failed');
         }
       }
