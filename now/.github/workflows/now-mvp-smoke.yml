@@ -1,0 +1,97 @@
+name: now-mvp smoke
+
+on:
+  push:
+    branches:
+      - now-mvp
+  pull_request:
+    branches:
+      - now-mvp
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required preview files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f now/vercel.json
+          test -f now/.vercelignore
+          test -f now/index.html
+          test -f now/index-integrated.html
+          test -f now/main-ui-realtime-bridge.js
+          test -f now/e2e-live-two-user-supabase-flow.html
+          test -f now/e2e-live-two-user-lifecycle.html
+          test -f now/backend/notification-worker/index.ts
+
+      - name: Validate integrated main UI bridge contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F 'main-ui-realtime-bridge.js' now/index-integrated.html >/dev/null
+          grep -F 'id="ask"' now/index-integrated.html >/dev/null
+          grep -F "#askBtn, #ask" now/main-ui-realtime-bridge.js >/dev/null
+          echo 'Integrated main UI bridge contract: OK'
+
+      - name: Validate Vercel routing JSON
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path('now/vercel.json').read_text())
+          assert isinstance(data.get('routes'), list), 'routes must be an array'
+          routes = data['routes']
+          text = json.dumps(routes)
+          assert '/backend' in text, 'backend deny route missing'
+          assert 'index-integrated.html' in text, 'integrated route missing'
+          assert 'index.html' in text, 'baseline route missing'
+          print('now/vercel.json routing contract: OK')
+          PY
+
+      - name: Verify backend is excluded from preview bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fx 'backend/' now/.vercelignore >/dev/null
+          grep -Fx 'backend/**' now/.vercelignore >/dev/null
+          echo 'Preview backend exclusion: OK'
+
+      - name: Verify worker secrets are not committed
+        shell: bash
+        run: |
+          set -euo pipefail
+          for root in now/index.html now/index-integrated.html now/*.js now/*.ts .github/workflows; do
+            [ -e "$root" ] || continue
+            if grep -InE 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' "$root" 2>/dev/null; then
+              echo "Possible committed service-role secret found in $root."
+              exit 1
+            fi
+            if grep -InE 'VAPID_PRIVATE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' "$root" 2>/dev/null; then
+              echo "Possible committed VAPID private key found in $root."
+              exit 1
+            fi
+          done
+          echo 'No obvious committed worker private secret detected in preview/runtime files.'
+
+      - name: Verify STO-NSK isolation in preview/runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(now/vercel.json now/index.html now/index-integrated.html .github/workflows/now-mvp-preview.yml .github/workflows/now-mvp-preview-ops.yml)
+          for file in "${files[@]}"; do
+            if grep -InE 'sto-nsk|STO-NSK' "$file" 2>/dev/null; then
+              echo "Unexpected STO-NSK reference found in $file."
+              exit 1
+            fi
+          done
+          echo 'STO-NSK isolation check: OK'
