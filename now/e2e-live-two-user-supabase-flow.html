@@ -8,8 +8,7 @@
     body{margin:0;padding:24px;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     main{max-width:920px;margin:auto}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:18px;margin:12px 0}
     button{border:0;border-radius:12px;padding:12px 16px;background:#151515;color:#fff;font:inherit;font-weight:800}
-    pre{white-space:pre-wrap;word-break:break-word}
-    .ok{color:#137936}.bad{color:#a43a3a}
+    pre{white-space:pre-wrap;word-break:break-word}.ok{color:#137936}.bad{color:#a43a3a}
   </style>
 </head>
 <body>
@@ -64,7 +63,6 @@
       requester = await createAuthedClient('requester');
       responder = await createAuthedClient('responder');
 
-      // Both clients use deterministic coordinates within the <=50 m nearby policy.
       const lat = 54.9838;
       const lng = 82.8961;
       await rpc(responder, 'upsert_my_presence', {
@@ -87,14 +85,13 @@
           const kind = String(row.kind || '').toUpperCase();
           if (kind === 'REQUEST_ANSWERED') answeredEvent = row;
           if (kind === 'REQUEST_FINALIZED') finalizedEvent = row;
-        })
-        .subscribe();
-      requesterChannel = channel;
-      await new Promise((resolve, reject) => {
+        });
+
+      requesterChannel = await new Promise((resolve, reject) => {
         const timeout = setTimeout(() => reject(new Error('requester Realtime subscription timeout')), 10000);
         channel.subscribe((status, error) => {
           if (error) { clearTimeout(timeout); reject(error); return; }
-          if (status === 'SUBSCRIBED') { clearTimeout(timeout); resolve(); }
+          if (status === 'SUBSCRIBED') { clearTimeout(timeout); resolve(channel); }
         });
       });
       log('requester: Realtime notification_events subscribed');
