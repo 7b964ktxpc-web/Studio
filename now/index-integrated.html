@@ -43,6 +43,7 @@
 <script src="realtime-ui-adapter-contract.js"></script>
 <script src="realtime-ui-lifecycle.js"></script>
 <script src="realtime-ui-page-bridge.js"></script>
+<script src="main-ui-realtime-bridge.js"></script>
 <script src="main-ui-answer-bridge.js"></script>
 <script src="supabase-realtime-adapter.js"></script>
 <script src="supabase-create-request-adapter.js"></script>
@@ -54,7 +55,7 @@
 (() => {
   const $ = s => document.querySelector(s);
   const toast = msg => { const el=$('#toast'); el.textContent=msg; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),2200); };
-  window.NowRequestRealtimeBridge = window.NowRealtimePageBridge?.createOptionalBridge?.({}) ?? Object.freeze({ enabled:false, errors:['Realtime page bridge unavailable'], async start(){ return null; }, async stop(){}, getActiveRequestId(){ return null; } });
+  window.NowRequestRealtimeBridge = window.NowMainUiRealtimeBridge?.enabled ? window.NowMainUiRealtimeBridge : (window.NowRealtimePageBridge?.createOptionalBridge?.({}) ?? Object.freeze({ enabled:false, errors:['Realtime page bridge unavailable'], async start(){ return null; }, async stop(){}, getActiveRequestId(){ return null; } }));
   const startRequestRealtime = async requestId => {
     if (!window.NowRequestRealtimeBridge.enabled) return null;
     const normalized = String(requestId || '').trim();
