@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Сейчас — live lifecycle E2E</title>
+  <style>body{margin:0;padding:24px;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:920px;margin:auto}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:18px;margin:12px 0}button{border:0;border-radius:12px;padding:12px 16px;background:#151515;color:#fff;font:inherit;font-weight:800}pre{white-space:pre-wrap;word-break:break-word}.ok{color:#137936}.bad{color:#a43a3a}</style>
+</head>
+<body>
+<main>
+  <h1>Live lifecycle E2E</h1>
+  <div class="card"><p>Проверяет duplicate-answer, terminal finalization и reconnect после terminal state в отдельном проекте «Сейчас».</p><button id="run">Запустить</button></div>
+  <div class="card"><pre id="out">готово</pre></div>
+</main>
+<script src="supabase-preview-config.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const run = document.querySelector('#run');
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const log = text => { out.textContent += `\n${text}`; };
+  const fail = error => { out.className = 'bad'; out.textContent += `\nFAIL: ${error?.message || error}`; console.error(error); };
+
+  async function authedClient(label) {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const client = createClient(window.NowSupabasePreviewConfig.url, window.NowSupabasePreviewConfig.publishableKey, {
+      auth:{persistSession:false,autoRefreshToken:true,detectSessionInUrl:false},
+    });
+    const signedIn = await client.auth.signInAnonymously();
+    if (signedIn.error) throw new Error(`${label} auth: ${signedIn.error.message}`);
+    if (!signedIn.data?.user?.id) throw new Error(`${label} has no user id`);
+    log(`${label}: authenticated`);
+    return client;
+  }
+  async function rpc(client,name,args,label){const r=await client.rpc(name,args);if(r.error)throw new Error(`${label||name}: ${r.error.message}`);return r.data;}
+
+  run.onclick = async () => {
+    run.disabled = true; out.className=''; out.textContent='starting live lifecycle E2E…';
+    let requester,responder,channel;
+    let requestId=''; let finalizedEventCount=0;
+    try {
+      requester = await authedClient('requester'); responder = await authedClient('responder');
+      const lat=54.9838,lng=82.8961;
+      await rpc(responder,'upsert_my_presence',{p_lat:lat,p_lng:lng,p_accuracy_m:10,p_available:true},'presence');
+
+      channel = requester.channel(`live-life-${Date.now()}`)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notification_events'},payload=>{
+          const row=payload?.new||{};
+          if(String(row.request_id||'')!==requestId)return;
+          if(String(row.kind||'').toUpperCase()==='REQUEST_FINALIZED') finalizedEventCount+=1;
+        });
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('Realtime subscribe timeout')),10000);
+        channel.subscribe((status,error)=>{if(error){clearTimeout(timer);reject(error);} else if(status==='SUBSCRIBED'){clearTimeout(timer);resolve();}});
+      });
+
+      const created = await rpc(requester,'create_request',{p_text:`LIVE lifecycle ${Date.now()}`,p_latitude:lat,p_longitude:lng},'create_request');
+      const row=Array.isArray(created)?created[0]:created; requestId=String(row?.request_id||'').trim(); if(!requestId)throw new Error('missing request_id');
+      log(`requester: ${requestId}`);
+
+      const nearby=await rpc(responder,'nearby_request_for_answer',{p_request_id:requestId},'nearby_request_for_answer');
+      if(!(Array.isArray(nearby)?nearby[0]:nearby))throw new Error('nearby lookup failed');
+
+      const first=await rpc(responder,'answer_request',{p_request_id:requestId,p_answer:'first live answer'},'first answer');
+      const firstRow=Array.isArray(first)?first[0]:first;
+      if(String(firstRow?.request_status)!=='SEARCHING')throw new Error('first answer unexpectedly terminal');
+      log('first answer accepted');
+
+      const duplicate=await responder.rpc('answer_request',{p_request_id:requestId,p_answer:'duplicate live answer'});
+      if(!duplicate.error)throw new Error('duplicate answer unexpectedly succeeded');
+      log(`duplicate answer rejected: ${duplicate.error.message}`);
+
+      const finalized=await rpc(requester,'finalize_request',{p_request_id:requestId},'finalize_request');
+      if(!(finalized===true || finalized==='true'))throw new Error('finalize_request did not return true');
+      log('finalize_request returned true');
+      for(let i=0;i<20&&finalizedEventCount===0;i++)await sleep(250);
+      if(finalizedEventCount!==1)throw new Error(`expected one REQUEST_FINALIZED event, got ${finalizedEventCount}`);
+      log('REQUEST_FINALIZED received exactly once');
+
+      const secondFinalize=await rpc(requester,'finalize_request',{p_request_id:requestId},'second finalize');
+      if(secondFinalize===true || secondFinalize==='true')throw new Error('second finalize unexpectedly succeeded');
+      log('second finalize returned false');
+
+      await requester.removeChannel(channel); channel=null;
+      const reconnect = requester.channel(`live-life-reconnect-${Date.now()}`)
+        .on('postgres_changes',{event:'INSERT',schema:'public',table:'notification_events'},()=>{throw new Error('unexpected terminal event on reconnect');});
+      await new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('reconnect subscribe timeout')),10000);
+        reconnect.subscribe((status,error)=>{if(error){clearTimeout(timer);reject(error);}else if(status==='SUBSCRIBED'){clearTimeout(timer);resolve();}});
+      });
+      log('requester: reconnect subscription established after terminal state');
+      await sleep(1000);
+      await requester.removeChannel(reconnect);
+
+      out.className='ok';
+      out.textContent += '\nPASS: duplicate answer rejected, finalization is single-shot, and reconnect after terminal state produces no new terminal event.';
+    } catch(error){ fail(error); }
+    finally{
+      try{if(channel&&requester)await requester.removeChannel(channel);}catch{}
+      try{if(responder)await responder.rpc('disable_my_presence');}catch{}
+      run.disabled=false;
+    }
+  };
+})();
+</script>
+</body>
+</html>
