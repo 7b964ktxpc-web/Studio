@@ -2,7 +2,7 @@ export type NotificationEvent = {
   id: string;
   userId: string;
   requestId: string | null;
-  kind: 'NEW_NEARBY_REQUEST' | 'REQUEST_ANSWERED' | 'REQUEST_EXPIRED';
+  kind: 'NEW_NEARBY_REQUEST' | 'REQUEST_ANSWERED' | 'REQUEST_FINALIZED' | 'REQUEST_EXPIRED';
   attempts: number;
 };
 
