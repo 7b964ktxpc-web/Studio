@@ -43,16 +43,6 @@ jobs:
           set -euo pipefail
           npx --yes vercel@latest link --project now-mvp-preview --token "$VERCEL_TOKEN" --yes
 
-      - name: Remove obsolete Vercel Web Push secrets
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in VAPID_PRIVATE_KEY NOTIFICATION_WORKER_SECRET; do
-            npx --yes vercel@latest env rm "$name" preview --token "$VERCEL_TOKEN" --yes >/dev/null 2>&1 || true
-          done
-
       - name: Verify worker auth gate
         shell: bash
         run: |
@@ -68,19 +58,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -fsS \
-            'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker' \
-            > /tmp/worker-health.json
+          status=$(curl -sS -o /tmp/worker-health.json -w '%{http_code}' \
+            'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker')
+          echo "worker health status=$status"
           node - <<'NODE'
           const fs = require('fs');
+          const status = Number(process.env.WORKER_HEALTH_STATUS);
           const body = JSON.parse(fs.readFileSync('/tmp/worker-health.json', 'utf8'));
-          if (body.ok !== true || typeof body.vapidPublicKey !== 'string' || body.vapidPublicKey.length < 80) {
-            console.error(JSON.stringify(body));
+          if (status !== 200 || body.ok !== true || typeof body.vapidPublicKey !== 'string' || body.vapidPublicKey.length < 80) {
+            console.error(`Worker runtime configuration is not ready: ${body.error || 'invalid health response'}`);
             process.exit(1);
           }
           fs.writeFileSync('/tmp/vapid-public-key', body.vapidPublicKey + '\n');
           NODE
           echo 'Supabase notification-worker configuration is healthy.'
+        env:
+          WORKER_HEALTH_STATUS: ${{ steps.worker_health.outputs.status }}
 
       - name: Update Preview public VAPID key
         shell: bash
@@ -114,7 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          body=$(curl -fsS \
+          body=$(curl -sS \
             'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker')
           echo "$body" | grep -Eq '"ok":true'
           echo 'worker runtime configuration: OK'
