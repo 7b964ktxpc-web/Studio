@@ -26,6 +26,7 @@ function messageFor(event: NotificationEvent): string {
   switch (event.kind) {
     case 'NEW_NEARBY_REQUEST': return 'Рядом появился новый вопрос';
     case 'REQUEST_ANSWERED': return 'К вашему вопросу пришёл ответ';
+    case 'REQUEST_FINALIZED': return 'Ответ на ваш вопрос подтверждён';
     case 'REQUEST_EXPIRED': return 'Время ожидания вопроса истекло';
   }
 }
