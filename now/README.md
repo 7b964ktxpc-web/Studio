@@ -111,14 +111,14 @@ Browser seams для create и answer уже соответствуют зафи
 
 Web Push persistence теперь имеет отдельный `supabase-push-adapter.js` и deterministic `e2e-supabase-push-adapter.html`. Реальные browser permissions и VAPID delivery остаются отдельным opt-in шагом: public VAPID key не угадывается и permission не запрашивается автоматически.
 
-Notification queue теперь имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `backend/e2e-supabase-notification-queue.html`. Adapter принимает только injected server client, ограничивает batch до 100 и мапит `claim_notification_events`, `mark_notification_delivered` и `release_notification_event` без хранения service-role credentials в репозитории.
+Notification queue имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `e2e-supabase-notification-queue.html`. Server-only Edge Function source `backend/notification-worker/index.ts` теперь связывает этот queue adapter с `processNotificationBatch()` и Web Push. Function source требует только environment secrets, не хранит service-role/VAPID credentials в репозитории и пока **не деплоен**.
 
 ## Следующий этап
 
 1. Запустить live two-user harness в отдельном `now-mvp` environment.
 2. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
 3. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-4. Подключить `supabase-notification-queue.ts` к реальному service-role worker runtime и провести queue → PushAdapter → delivered/retry E2E; реальный Web Push runtime требует отдельной VAPID configuration.
+4. Задеплоить notification worker только в отдельный `now-mvp` integration environment с отдельными service-role/VAPID/worker-secret values и провести queue → PushAdapter → delivered/retry E2E.
 5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
 6. Только после этого обсуждать production release.
 
