@@ -45,6 +45,20 @@ jobs:
 
       - name: Deploy only the now directory
         if: ${{ env.VERCEL_TOKEN != '' }}
+        id: deploy
         working-directory: now
         run: |
-          vercel deploy --yes --token "$VERCEL_TOKEN"
+          set -euo pipefail
+          vercel deploy --yes --token "$VERCEL_TOKEN" 2>&1 | tee deploy.log
+          deployment_url="$(grep -Eo 'https://[A-Za-z0-9.-]+\.vercel\.app' deploy.log | tail -1)"
+          test -n "$deployment_url"
+          echo "deployment_url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "Preview deployment: $deployment_url"
+
+      - name: Verify deployment identity
+        if: ${{ env.VERCEL_TOKEN != '' }}
+        working-directory: now
+        run: |
+          set -euo pipefail
+          test -n "${{ steps.deploy.outputs.deployment_url }}"
+          echo "Verified deployment URL: ${{ steps.deploy.outputs.deployment_url }}"
