@@ -34,4 +34,21 @@ Read-only database verification confirms the intended permission split:
 - `release()` clamps retry delay to 5–3600 seconds;
 - the adapter requires an injected RPC client and stores no service-role credentials.
 
-The remaining acceptance items require a real worker runtime with service-role credentials and, for Web Push delivery, a separate VAPID configuration. They are not marked PASS by static inspection alone.
+## Server runtime entrypoint
+
+`backend/notification-worker/index.ts` is now a server-only Edge Function entrypoint that wires:
+
+`service-role Supabase client → supabase-notification-queue → processNotificationBatch → Web Push adapter`.
+
+The entrypoint requires these environment secrets and never stores them in source control:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- `VAPID_SUBJECT`
+- `NOTIFICATION_WORKER_SECRET`
+
+It accepts only `POST` with `x-notification-worker-secret`, caps work through the queue adapter, sends payloads without coordinates/private profile data, and records delivery/retry through the queue RPCs.
+
+The entrypoint is source-controlled but **not deployed yet**. A real runtime acceptance still requires a separate `now-mvp` environment with service-role/VAPID secrets and browser-generated push subscriptions. No production secret is assumed or copied from `STO-NSK`.
