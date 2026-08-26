@@ -14,6 +14,14 @@
     const resolved = resolveClient(candidate);
     if (!resolved.client) return Object.freeze({ enabled: false, errors: resolved.errors });
 
+    const snapshotAdapter = window.NowSupabaseRequestSnapshotAdapter?.createOptionalAdapter?.(resolved.client);
+    if (!snapshotAdapter?.enabled) {
+      return Object.freeze({
+        enabled: false,
+        errors: snapshotAdapter?.errors || ['Authoritative request snapshot adapter is unavailable'],
+      });
+    }
+
     let activeChannel = null;
     let activeRequestId = null;
 
@@ -33,32 +41,21 @@
       return lookup.data;
     };
 
-    const emitAnswerSnapshot = async (normalized, handlers) => {
+    const refreshRequest = async (normalized, handlers, eventKind = null) => {
+      const snapshot = await snapshotAdapter.refreshRequest(normalized);
       const answers = await loadAnswers(normalized);
       const payload = {
-        request_id: normalized,
-        request_status: 'SEARCHING',
-        event_kind: 'REQUEST_ANSWERED',
-        source: 'notification_events',
+        ...snapshot,
+        request_id: snapshot.id,
+        request_status: snapshot.status,
+        event_kind: eventKind,
+        source: 'authoritative_snapshot',
         answers,
         latest_answer: answers.length ? answers[answers.length - 1] : null,
       };
       handlers.onEvent?.(payload);
       handlers.onSnapshot?.(payload);
-    };
-
-    const emitFinalizedSnapshot = async (normalized, handlers) => {
-      const answers = await loadAnswers(normalized);
-      const payload = {
-        request_id: normalized,
-        request_status: 'ANSWERED',
-        event_kind: 'REQUEST_FINALIZED',
-        source: 'notification_events',
-        answers,
-        latest_answer: answers.length ? answers[answers.length - 1] : null,
-      };
-      handlers.onEvent?.(payload);
-      handlers.onSnapshot?.(payload);
+      return payload;
     };
 
     const start = async (requestId, handlers = {}) => {
@@ -77,10 +74,9 @@
             const kind = String(row.kind || '').toUpperCase();
             if (String(row.request_id || '') !== normalized) return;
 
-            if (kind === 'REQUEST_ANSWERED') {
-              Promise.resolve(emitAnswerSnapshot(normalized, handlers)).catch(error => handlers.onError?.(error));
-            } else if (kind === 'REQUEST_FINALIZED') {
-              Promise.resolve(emitFinalizedSnapshot(normalized, handlers)).catch(error => handlers.onError?.(error));
+            if (kind === 'REQUEST_ANSWERED' || kind === 'REQUEST_FINALIZED') {
+              Promise.resolve(refreshRequest(normalized, handlers, kind))
+                .catch(error => handlers.onError?.(error));
             }
           },
         )
@@ -90,6 +86,7 @@
         });
 
       activeChannel = channel;
+      await refreshRequest(normalized, handlers, null);
       return normalized;
     };
 
@@ -98,6 +95,7 @@
       errors: [],
       start,
       stop,
+      refreshRequest,
       getActiveRequestId: () => activeRequestId,
     });
   }
