@@ -53,6 +53,7 @@ function createPushAdapter(client: ReturnType<typeof createClient>): PushAdapter
       });
 
       let delivered = 0;
+      let staleRemoved = 0;
       const failures: string[] = [];
 
       for (const subscription of subscriptions) {
@@ -83,6 +84,8 @@ function createPushAdapter(client: ReturnType<typeof createClient>): PushAdapter
                 .eq('endpoint', endpoint);
               if (removeError) {
                 failures.push(removeError.message || 'Failed to remove stale push subscription');
+              } else {
+                staleRemoved += 1;
               }
             }
             continue;
@@ -93,6 +96,7 @@ function createPushAdapter(client: ReturnType<typeof createClient>): PushAdapter
       }
 
       if (delivered > 0) return { delivered: true };
+      if (staleRemoved > 0 && staleRemoved === subscriptions.length && failures.length === 0) return { delivered: true };
       return { delivered: false, error: failures.join('; ').slice(0, 1000) || 'Push delivery failed' };
     },
   };
