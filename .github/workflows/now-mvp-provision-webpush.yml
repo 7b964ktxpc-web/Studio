@@ -86,10 +86,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VAPID_PUBLIC_KEY=$(cat /tmp/vapid-public-key)
           python3 - <<'PY'
           from pathlib import Path
-          import os
           key = Path('/tmp/vapid-public-key').read_text().strip()
           p = Path('now/web-push-config.js')
           p.write_text("""(() => {\n  // Preview-only public configuration. Never put VAPID private keys here.\n  window.NowWebPushConfig = Object.freeze({\n    vapidPublicKey: '%s',\n  });\n})();\n""" % key)
@@ -120,3 +118,5 @@ jobs:
             'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker')
           echo "$body" | grep -Eq '"ok":true'
           echo 'worker runtime configuration: OK'
+
+# Provision runtime trigger.
