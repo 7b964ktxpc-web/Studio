@@ -111,7 +111,7 @@ Browser seams для create и answer уже соответствуют зафи
 
 Web Push persistence теперь имеет отдельный `supabase-push-adapter.js` и deterministic `e2e-supabase-push-adapter.html`. Реальные browser permissions и VAPID delivery остаются отдельным opt-in шагом: public VAPID key не угадывается и permission не запрашивается автоматически.
 
-Notification queue теперь имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `e2e-supabase-notification-queue.html`. Adapter принимает только injected server client, ограничивает batch до 100 и мапит `claim_notification_events`, `mark_notification_delivered` и `release_notification_event` без хранения service-role credentials в репозитории.
+Notification queue теперь имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `backend/e2e-supabase-notification-queue.html`. Adapter принимает только injected server client, ограничивает batch до 100 и мапит `claim_notification_events`, `mark_notification_delivered` и `release_notification_event` без хранения service-role credentials в репозитории.
 
 ## Следующий этап
 
