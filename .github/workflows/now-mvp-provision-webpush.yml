@@ -1,6 +1,8 @@
 name: Provision now-mvp Preview Web Push
 
 on:
+  push:
+    branches: [now-mvp]
   workflow_dispatch:
 
 permissions:
@@ -8,6 +10,9 @@ permissions:
 
 jobs:
   provision:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.head_commit.message == 'Provision Preview Web Push runtime'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout now-mvp
