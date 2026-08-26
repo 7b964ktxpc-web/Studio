@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Сейчас — live two-user Supabase E2E</title>
+  <style>
+    body{margin:0;padding:24px;background:#f5f5f0;color:#151515;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{max-width:920px;margin:auto}.card{background:#fff;border:1px solid #e7e4de;border-radius:18px;padding:18px;margin:12px 0}
+    button{border:0;border-radius:12px;padding:12px 16px;background:#151515;color:#fff;font:inherit;font-weight:800}
+    pre{white-space:pre-wrap;word-break:break-word}
+    .ok{color:#137936}.bad{color:#a43a3a}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Live two-user Supabase E2E</h1>
+  <div class="card">
+    <p>Запускает два независимых anonymous-auth клиента в отдельном проекте «Сейчас».</p>
+    <button id="run">Запустить live E2E</button>
+  </div>
+  <div class="card"><pre id="out">готово</pre></div>
+</main>
+<script src="supabase-preview-config.js"></script>
+<script>
+(async () => {
+  const out = document.querySelector('#out');
+  const run = document.querySelector('#run');
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const log = text => { out.textContent += `\n${text}`; };
+  const fail = error => { out.className = 'bad'; out.textContent += `\nFAIL: ${error?.message || error}`; console.error(error); };
+
+  async function createAuthedClient(label) {
+    const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2');
+    const client = createClient(window.NowSupabasePreviewConfig.url, window.NowSupabasePreviewConfig.publishableKey, {
+      auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: false },
+    });
+    const signedIn = await client.auth.signInAnonymously();
+    if (signedIn.error) throw new Error(`${label} anonymous auth: ${signedIn.error.message}`);
+    const user = signedIn.data?.user;
+    if (!user?.id) throw new Error(`${label} did not receive authenticated user`);
+    log(`${label}: authenticated ${user.id}`);
+    return client;
+  }
+
+  async function rpc(client, name, args, label) {
+    const result = await client.rpc(name, args);
+    if (result.error) throw new Error(`${label || name}: ${result.error.message}`);
+    return result.data;
+  }
+
+  run.onclick = async () => {
+    run.disabled = true;
+    out.className = '';
+    out.textContent = 'starting live E2E…';
+    let requester;
+    let responder;
+    let requesterChannel;
+    let answeredEvent = null;
+    let finalizedEvent = null;
+    const requestIdSeed = `live-e2e-${Date.now()}`;
+
+    try {
+      requester = await createAuthedClient('requester');
+      responder = await createAuthedClient('responder');
+
+      // Both clients use deterministic coordinates within the <=50 m nearby policy.
+      const lat = 54.9838;
+      const lng = 82.8961;
+      await rpc(responder, 'upsert_my_presence', {
+        p_lat: lat,
+        p_lng: lng,
+        p_accuracy_m: 10,
+        p_available: true,
+      }, 'responder presence');
+      log('responder: presence ENABLED at accuracy 10 m');
+
+      const channel = requester
+        .channel(`live-e2e-request-${Date.now()}`)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notification_events',
+        }, payload => {
+          const row = payload?.new || {};
+          if (String(row.request_id || '') !== String(window.__liveRequestId || '')) return;
+          const kind = String(row.kind || '').toUpperCase();
+          if (kind === 'REQUEST_ANSWERED') answeredEvent = row;
+          if (kind === 'REQUEST_FINALIZED') finalizedEvent = row;
+        })
+        .subscribe();
+      requesterChannel = channel;
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('requester Realtime subscription timeout')), 10000);
+        channel.subscribe((status, error) => {
+          if (error) { clearTimeout(timeout); reject(error); return; }
+          if (status === 'SUBSCRIBED') { clearTimeout(timeout); resolve(); }
+        });
+      });
+      log('requester: Realtime notification_events subscribed');
+
+      const created = await rpc(requester, 'create_request', {
+        p_text: `LIVE E2E ${requestIdSeed}`,
+        p_latitude: lat,
+        p_longitude: lng,
+      }, 'create_request');
+      const createdRow = Array.isArray(created) ? created[0] : created;
+      const requestId = String(createdRow?.request_id || '').trim();
+      if (!requestId) throw new Error('create_request returned no request_id');
+      window.__liveRequestId = requestId;
+      log(`requester: created ${requestId}`);
+
+      const nearby = await rpc(responder, 'nearby_request_for_answer', { p_request_id: requestId }, 'nearby_request_for_answer');
+      const nearbyRow = Array.isArray(nearby) ? nearby[0] : nearby;
+      if (!nearbyRow || String(nearbyRow.id) !== requestId) throw new Error('responder could not see nearby request');
+      log(`responder: nearby_request_for_answer sees request at ${nearbyRow.distance_m} m`);
+
+      const answer = await rpc(responder, 'answer_request', {
+        p_request_id: requestId,
+        p_answer: 'LIVE E2E answer',
+      }, 'answer_request');
+      const answerRow = Array.isArray(answer) ? answer[0] : answer;
+      if (!answerRow || String(answerRow.request_id) !== requestId || String(answerRow.request_status) !== 'SEARCHING') {
+        throw new Error('answer_request did not preserve non-terminal SEARCHING status');
+      }
+      log('responder: answer_request accepted and request remains SEARCHING');
+
+      for (let i = 0; i < 30 && !answeredEvent; i += 1) await sleep(250);
+      if (!answeredEvent) throw new Error('requester did not receive REQUEST_ANSWERED Realtime event');
+      log('requester: received REQUEST_ANSWERED Realtime event');
+
+      const answers = await rpc(requester, 'my_request_answers', { p_request_id: requestId }, 'my_request_answers');
+      const answerList = Array.isArray(answers) ? answers : [];
+      if (!answerList.some(item => String(item.answer) === 'LIVE E2E answer')) throw new Error('requester answer read RPC did not return the submitted answer');
+      log('requester: my_request_answers returned the answer without responder identity');
+
+      const finalized = await rpc(requester, 'finalize_request', { p_request_id: requestId }, 'finalize_request');
+      const finalizedValue = Array.isArray(finalized) ? finalized[0] : finalized;
+      if (finalizedValue !== true && finalizedValue !== 'true') throw new Error('finalize_request did not confirm finalization');
+      log('requester: finalize_request returned true');
+
+      for (let i = 0; i < 30 && !finalizedEvent; i += 1) await sleep(250);
+      if (!finalizedEvent) throw new Error('requester did not receive REQUEST_FINALIZED Realtime event');
+      log('requester: received REQUEST_FINALIZED Realtime event');
+
+      out.className = 'ok';
+      out.textContent += '\nPASS: live authenticated two-user create → nearby → answer → REQUEST_ANSWERED → answer read → finalize → REQUEST_FINALIZED flow completed.';
+    } catch (error) {
+      fail(error);
+    } finally {
+      try { if (requesterChannel && requester) await requester.removeChannel(requesterChannel); } catch {}
+      try { if (responder) await responder.rpc('disable_my_presence'); } catch {}
+      run.disabled = false;
+    }
+  };
+})();
+</script>
+</body>
+</html>
