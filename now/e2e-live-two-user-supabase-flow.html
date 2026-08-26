@@ -48,6 +48,16 @@
     return result.data;
   }
 
+  async function readAuthoritativeSnapshot(client, requestId, label) {
+    const data = await rpc(client, 'my_request', { p_request_id: requestId }, `${label || 'my_request'} authoritative snapshot`);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || String(row.id) !== requestId) throw new Error(`${label || 'my_request'} authoritative snapshot returned wrong request`);
+    if (!['SEARCHING', 'ANSWERED', 'EXPIRED', 'CANCELLED'].includes(String(row.status).toUpperCase())) {
+      throw new Error(`${label || 'my_request'} authoritative snapshot returned invalid status`);
+    }
+    return row;
+  }
+
   run.onclick = async () => {
     run.disabled = true;
     out.className = '';
@@ -107,6 +117,10 @@
       window.__liveRequestId = requestId;
       log(`requester: created ${requestId}`);
 
+      const initialSnapshot = await readAuthoritativeSnapshot(requester, requestId, 'requester');
+      if (String(initialSnapshot.status).toUpperCase() !== 'SEARCHING') throw new Error('authoritative snapshot after create is not SEARCHING');
+      log('requester: authoritative my_request snapshot is SEARCHING');
+
       const nearby = await rpc(responder, 'nearby_request_for_answer', { p_request_id: requestId }, 'nearby_request_for_answer');
       const nearbyRow = Array.isArray(nearby) ? nearby[0] : nearby;
       if (!nearbyRow || String(nearbyRow.id) !== requestId) throw new Error('responder could not see nearby request');
@@ -126,6 +140,11 @@
       if (!answeredEvent) throw new Error('requester did not receive REQUEST_ANSWERED Realtime event');
       log('requester: received REQUEST_ANSWERED Realtime event');
 
+      const refreshedAfterAnswer = await readAuthoritativeSnapshot(requester, requestId, 'requester after REQUEST_ANSWERED');
+      if (String(refreshedAfterAnswer.status).toUpperCase() !== 'SEARCHING') throw new Error('refreshRequest snapshot after answer is not SEARCHING');
+      if (String(refreshedAfterAnswer.text) !== `LIVE E2E ${requestIdSeed}`) throw new Error('refreshRequest snapshot text mismatch');
+      log('requester: REQUEST_ANSWERED -> authoritative refreshRequest snapshot succeeded');
+
       const answers = await rpc(requester, 'my_request_answers', { p_request_id: requestId }, 'my_request_answers');
       const answerList = Array.isArray(answers) ? answers : [];
       if (!answerList.some(item => String(item.answer) === 'LIVE E2E answer')) throw new Error('requester answer read RPC did not return the submitted answer');
@@ -140,8 +159,12 @@
       if (!finalizedEvent) throw new Error('requester did not receive REQUEST_FINALIZED Realtime event');
       log('requester: received REQUEST_FINALIZED Realtime event');
 
+      const refreshedAfterFinalize = await readAuthoritativeSnapshot(requester, requestId, 'requester after REQUEST_FINALIZED');
+      if (String(refreshedAfterFinalize.status).toUpperCase() !== 'ANSWERED') throw new Error('refreshRequest snapshot after finalize is not ANSWERED');
+      log('requester: REQUEST_FINALIZED -> authoritative refreshRequest snapshot is ANSWERED');
+
       out.className = 'ok';
-      out.textContent += '\nPASS: live authenticated two-user create → nearby → answer → REQUEST_ANSWERED → answer read → finalize → REQUEST_FINALIZED flow completed.';
+      out.textContent += '\nPASS: live authenticated two-user create → nearby → answer → REQUEST_ANSWERED → authoritative refresh → answer read → finalize → REQUEST_FINALIZED → authoritative ANSWERED snapshot.';
     } catch (error) {
       fail(error);
     } finally {
