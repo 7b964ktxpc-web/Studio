@@ -23,7 +23,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f vercel.json
+          test -f now/vercel.json
+          test -f now/.vercelignore
           test -f now/index.html
           test -f now/index-integrated.html
           test -f now/e2e-live-two-user-supabase-flow.html
@@ -37,21 +38,29 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-          data = json.loads(Path('vercel.json').read_text())
+          data = json.loads(Path('now/vercel.json').read_text())
           assert isinstance(data.get('routes'), list), 'routes must be an array'
           routes = data['routes']
           text = json.dumps(routes)
-          assert '/now/backend/' in text, 'backend deny route missing'
-          assert 'now/index-integrated.html' in text, 'integrated route missing'
-          assert 'now/index.html' in text, 'baseline route missing'
-          print('vercel.json routing contract: OK')
+          assert '/backend' in text, 'backend deny route missing'
+          assert 'index-integrated.html' in text, 'integrated route missing'
+          assert 'index.html' in text, 'baseline route missing'
+          print('now/vercel.json routing contract: OK')
           PY
+
+      - name: Verify backend is excluded from preview bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fx 'backend/' now/.vercelignore >/dev/null
+          grep -Fx 'backend/**' now/.vercelignore >/dev/null
+          echo 'Preview backend exclusion: OK'
 
       - name: Verify worker secrets are not committed
         shell: bash
         run: |
           set -euo pipefail
-          for root in now/index.html now/index-integrated.html now/*.js now/*.ts vercel.json .github/workflows; do
+          for root in now/index.html now/index-integrated.html now/*.js now/*.ts .github/workflows; do
             [ -e "$root" ] || continue
             if grep -InE 'SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$<{][A-Za-z0-9_\-]+' "$root" 2>/dev/null; then
               echo "Possible committed service-role secret found in $root."
@@ -68,7 +77,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          files=(vercel.json now/index.html now/index-integrated.html)
+          files=(now/vercel.json now/index.html now/index-integrated.html .github/workflows/now-mvp-preview.yml)
           for file in "${files[@]}"; do
             if grep -InE 'sto-nsk|STO-NSK' "$file" 2>/dev/null; then
               echo "Unexpected STO-NSK reference found in $file."
