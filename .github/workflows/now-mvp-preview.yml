@@ -37,13 +37,15 @@ jobs:
 
       - name: Link only the now-mvp-preview project
         if: ${{ secrets.VERCEL_TOKEN != '' }}
+        working-directory: now
         run: |
           vercel link --yes --project now-mvp-preview --scope gin8 --token "$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy preview
+      - name: Deploy only the now directory
         if: ${{ secrets.VERCEL_TOKEN != '' }}
+        working-directory: now
         run: |
           vercel deploy --yes --token "$VERCEL_TOKEN"
         env:
