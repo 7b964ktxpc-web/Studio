@@ -61,9 +61,10 @@ jobs:
           status=$(curl -sS -o /tmp/worker-health.json -w '%{http_code}' \
             'https://amyysvcpmbyuxelxixqj.supabase.co/functions/v1/notification-worker')
           echo "worker health status=$status"
+          printf '%s\n' "$status" > /tmp/worker-health-status
           node - <<'NODE'
           const fs = require('fs');
-          const status = Number(process.env.WORKER_HEALTH_STATUS);
+          const status = Number(fs.readFileSync('/tmp/worker-health-status', 'utf8').trim());
           const body = JSON.parse(fs.readFileSync('/tmp/worker-health.json', 'utf8'));
           if (status !== 200 || body.ok !== true || typeof body.vapidPublicKey !== 'string' || body.vapidPublicKey.length < 80) {
             console.error(`Worker runtime configuration is not ready: ${body.error || 'invalid health response'}`);
@@ -72,8 +73,6 @@ jobs:
           fs.writeFileSync('/tmp/vapid-public-key', body.vapidPublicKey + '\n');
           NODE
           echo 'Supabase notification-worker configuration is healthy.'
-        env:
-          WORKER_HEALTH_STATUS: ${{ steps.worker_health.outputs.status }}
 
       - name: Update Preview public VAPID key
         shell: bash
