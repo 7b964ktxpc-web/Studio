@@ -56,7 +56,8 @@
 - nearby event source contract;
 - Supabase `create_request` adapter contract + page bridge;
 - Supabase `answer_request` adapter contract + page bridge;
-- deterministic E2E harnesses для create, answer, accuracy, switching и двухпользовательского request_id flow.
+- deterministic E2E harnesses для create, answer, accuracy, switching и двухпользовательского request_id flow;
+- live authenticated two-user Supabase E2E harness.
 
 ### Backend design
 - PostGIS схема для `requests`, `presence`, `answers`, `notification_events`;
@@ -99,11 +100,11 @@ Supabase advisors в integration environment показывают ожидаем
 
 Browser seams для create и answer уже соответствуют зафиксированным draft RPC и проходят deterministic rehearsal. Реальный Supabase client намеренно не создаётся в production UI.
 
-Следующий безопасный рубеж — **реальный authenticated two-user E2E в отдельной `now-mvp` environment**, а не подключение `STO-NSK` или production traffic.
+Добавлен `e2e-live-two-user-supabase-flow.html` и acceptance-документ `LIVE_TWO_USER_SUPABASE_E2E.md`. Harness рассчитан на запуск в браузере против отдельного `now-mvp` project с Anonymous Sign-Ins. Он не считается PASS, пока не прошёл полный authenticated flow на реальном endpoint.
 
 ## Следующий этап
 
-1. Поднять authenticated browser sessions в отдельной `now-mvp` environment.
+1. Запустить live two-user harness в отдельном `now-mvp` environment.
 2. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
 3. Проверить reconnect/expiry/duplicate-answer/terminal lifecycle в реальном браузере.
 4. Проверить notification worker end-to-end на `notification_events` и Web Push.
