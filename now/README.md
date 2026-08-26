@@ -113,14 +113,16 @@ Web Push persistence теперь имеет отдельный `supabase-push-a
 
 Notification queue имеет отдельный `backend/supabase-notification-queue.ts` и deterministic `e2e-supabase-notification-queue.html`. Server-only Edge Function source `backend/notification-worker/index.ts` теперь связывает этот queue adapter с `processNotificationBatch()` и Web Push. Function source требует только environment secrets, не хранит service-role/VAPID credentials в репозитории и пока **не деплоен**.
 
+Preview routing теперь также source-controlled: root `vercel.json` публикует `now/index.html`, `now/index-integrated.html` и E2E через короткие root paths, а `now/backend/*` блокируется `404`. Отдельный Vercel project `now-mvp-preview` уже существует, но его последняя deployment была создана до routing commit; её `/index-integrated.html` пока возвращает `404` до следующего preview deployment.
+
 ## Следующий этап
 
-1. Запустить live two-user harness в отдельном `now-mvp` environment.
-2. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
-3. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
-4. Задеплоить notification worker только в отдельный `now-mvp` integration environment с отдельными service-role/VAPID/worker-secret values и провести queue → PushAdapter → delivered/retry E2E.
-5. После зелёного E2E привязать `now-mvp` к отдельному preview hosting target.
-6. Только после этого обсуждать production release.
+1. Выполнить новый preview deployment `now-mvp` с текущим `vercel.json` и проверить `/`, `/index-integrated.html`, `/e2e-*.html` и недоступность `/now/backend/*`.
+2. Запустить live two-user harness в отдельном `now-mvp` environment.
+3. Запустить lifecycle harness: duplicate-answer → finalize → reconnect/terminal regression.
+4. Провести реальный двухпользовательский E2E: **создал запрос → nearby user получил realtime/push → ответил → автор получил authoritative answer event**.
+5. Задеплоить notification worker только в отдельный `now-mvp` integration environment с отдельными service-role/VAPID/worker-secret values и провести queue → PushAdapter → delivered/retry E2E.
+6. После зелёного E2E закрепить preview hosting и только затем обсуждать production release.
 
 ## Принцип MVP
 
