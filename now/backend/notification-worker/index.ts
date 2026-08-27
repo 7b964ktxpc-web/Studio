@@ -9,11 +9,24 @@ import {
 import { createSupabaseNotificationQueue } from '../supabase-notification-queue.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const LEGACY_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const SUPABASE_SECRET_KEYS_RAW = Deno.env.get('SUPABASE_SECRET_KEYS') || '';
 const VAPID_PUBLIC_KEY = Deno.env.get('VAPID_PUBLIC_KEY') || '';
 const VAPID_PRIVATE_KEY = Deno.env.get('VAPID_PRIVATE_KEY') || '';
 const VAPID_SUBJECT = Deno.env.get('VAPID_SUBJECT') || '';
 const WORKER_SECRET = Deno.env.get('NOTIFICATION_WORKER_SECRET') || '';
+
+function defaultSecretKey(): string {
+  if (!SUPABASE_SECRET_KEYS_RAW) return '';
+  try {
+    const keys = JSON.parse(SUPABASE_SECRET_KEYS_RAW) as Record<string, unknown>;
+    return typeof keys.default === 'string' ? keys.default : '';
+  } catch {
+    return '';
+  }
+}
+
+const SERVICE_ROLE_KEY = LEGACY_SERVICE_ROLE_KEY || defaultSecretKey();
 
 function configError(): string | null {
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return 'Supabase server credentials are not configured';
@@ -104,6 +117,21 @@ function createPushAdapter(client: ReturnType<typeof createClient>): PushAdapter
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'GET') {
+    const error = configError();
+    if (error) return Response.json({ ok: false, error }, { status: 503 });
+
+    return Response.json({
+      ok: true,
+      vapidPublicKey: VAPID_PUBLIC_KEY,
+      runtime: {
+        supabase: true,
+        vapid: true,
+        workerSecret: true,
+      },
+    });
+  }
+
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 });
 
   const suppliedSecret = req.headers.get('x-notification-worker-secret') || '';
