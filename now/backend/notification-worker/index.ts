@@ -5,8 +5,8 @@ import {
   type DeliveryResult,
   type NotificationEvent,
   type PushAdapter,
-} from '../notification-worker.ts';
-import { createSupabaseNotificationQueue } from '../supabase-notification-queue.ts';
+} from './notification-worker.ts';
+import { createSupabaseNotificationQueue } from './supabase-notification-queue.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
 const LEGACY_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
